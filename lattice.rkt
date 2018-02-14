@@ -39,6 +39,7 @@
 (define conc-eq? eq?)
 
 (define conc-global
+  
   `(("=" . ,(conc-α (prim2 "=" =)))
     ("<" . ,(conc-α (prim2 "<" <)))
     (">" . ,(conc-α (prim2 ">" >)))
