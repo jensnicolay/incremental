@@ -4,6 +4,8 @@
 (require "ast.rkt")
 (require "lattice.rkt")
 
+(provide conc-eval)
+
 (define ns (make-base-namespace))
 
 ;;;;;;;;;;
@@ -112,7 +114,7 @@
              (graph-succ (set-rest W) ((lattice-⊔ lat) d (ev (state-e s*) s* g lat parent)))))))
     ((«set!» _ _ _)
      ((lattice-α lat) 'undefined))
-    ((«app» _ («id» _ x) e-rands)
+    ((«app» _ («id» _ x) e-rands) ;TODO: ((lam ...) rands)
      (let ((κ (state-κ s)))
        (let ((S-succ (successors s g)))
          ;(printf "successors ~v = ~v\n" s S-succ)
@@ -272,8 +274,7 @@
 
 (define (explore e lat)
 
-  (define ast (compile e))
-  (define parent (make-parent ast))
+  (define parent (make-parent e))
   
   ; state -> (set state...)
   (define fwd (hash))
@@ -389,24 +390,64 @@
     (match s
       ((state e κ) (helper e κ))))
 
-  (define (explore-loop W S)
-    (if (set-empty? W)
-        (system (graph fwd bwd ast) parent)
-        (let ((s (set-first W)))
-          (if (set-member? S s)
-              (explore-loop (set-rest W) S)
-              (let ((S* (set-add S s)))
-                (let* ((Δi0 Δi)
-                       (succs (step s))
-                       (W* (set-union (set-rest W) succs))
-                       (S* (if (> Δi Δi0)
-                               (set)
-                               (set-add S s))))
-                  ;(printf "TRANS ~v -> ~v\n" (state->statei s) (set-map succs state->statei))
-                  (add-transitions! s succs)
-                  (explore-loop W* S*)))))))
+  (define (explore! W S)
+    (unless (set-empty? W)
+      (let ((s (set-first W)))
+        (if (set-member? S s)
+            (explore! (set-rest W) S)
+            (let ((S* (set-add S s)))
+              (let* ((Δi0 Δi)
+                     (succs (step s))
+                     (W* (set-union (set-rest W) succs))
+                     (S* (if (> Δi Δi0)
+                             (set)
+                             (set-add S s))))
+                ;(printf "TRANS ~v -> ~v\n" (state->statei s) (set-map succs state->statei))
+                (add-transitions! s succs)
+                (explore! W* S*)))))))
+
+;  (define (incremental-update ast-update)
+;    (match ast-update
+;      ((replace e e*) (incremental-replace sys e e*))))
+        
+;  (define (incremental-replace sys e e*)
+;  
+;    (let ((S-rem (states-for-expression e g)))
+;      (for ((s-rem (in-set S-rem)))
+;        (let ((s* (state e* (state-κ s-rem))))
+;          (replace-state! s-rem s*)
+;          (let ((S-seen (list->set (hash-keys bwd))))
+;            (explore! (set s*) S-seen)
+;            (let ((S-value (value-flow s* g)))
+;              (let value-loop ((S-value S-value))
+;                (if (set-empty? S-value)
+;                    (let ((S-ref (references s* g)))
+;                      (let ref-loop ((S-ref S-ref))
+;                        (if (set-empty? S-ref)
+;                            'nothing
+;                            
+          
+;    (define (value-flow e)
+;      (match (parent e)
+;        ((«let» _ x (== e) _) x)))
+;  
+
+;    (let value-loop ((e e) (control-refs '()))
+;      (let ((decl (value-flow e parent)))
+;        (let ((refs (find-ast-references («id»-x decl) (parent decl))))
+;          (let ref-loop ((refs refs) (control-refs2 '()))
+;            (if (null? refs)
+;                (value-loop 
+;                (let ((ref (car refs)))
+;                  (if (in-operator-position? ref parent)
+                    
+                  
+
+                        ;
     
-  (explore-loop (set (state ast (ctx #f #f (count!)))) (set)))
+  (let ((s0 (state e (ctx #f #f (count!)))))
+    (explore! (set s0) (set))
+    (system (graph fwd bwd s0) parent))) ;incremental-update)))
 
 (define (end-states g)
   (match g
@@ -419,103 +460,118 @@
          (g (system-graph sys))
          (S-end (end-states g))
          (parent (system-parent sys)))
-    ;(printf "\n\nEXPLORED with end states ~v\n" (set-map S-end state->statei))
-    ;(generate-dot g "grapho")
+    (printf "\n\nEXPLORED with end states ~v\n" (set-map S-end state->statei))
+    (generate-dot g "grapho")
     (for/fold ((d (lattice-⊥ lat))) ((s (in-set S-end)))
       ((lattice-⊔ lat) d (ev (state-e s) s g lat parent)))))
 
 (define (conc-eval e)
   (evaluate e conc-lattice))
 
+
+;; incremental
+
+(struct replace (exp new-exp) #:transparent)
+
+; ast level
+(define (perform-ast-replace ast e e*)
+  (define (helper e**)
+    (if (equal? e** e)
+        e*
+        (match e**
+          ((«id» _ _) e**)
+          ((«lit» _ _) e**)
+          ((«quo» _ _) e**)
+          ((«lam» l x e) («lam» l (helper x) (helper e)))
+          ((«let» l x e0 e1) («let» l (helper x) (helper e0) (helper e1)))
+          ((«letrec» l x e0 e1) («letrec» l (helper x) (helper e0) (helper e1)))
+          ((«if» l ae e1 e2) («if» l (helper ae) (helper e1) (helper e2)))
+          ((«set!» l x ae) («set!» l (helper x) (helper ae)))
+          ((«app» l rator rands) («app» l (helper rator) (map helper rands)))
+          (_ (error "cannot handle expression" e**)))))
+  (helper ast))
+                                                  
+(define (perform-ast-update ast update)
+  (match update
+    ((replace e e*) (perform-ast-replace ast e e*))))
+
+(define (find-ast-references x ast parent)
+  (define (ast-helper e)
+    (match e
+      ((«id» _ (== x))
+       (set e))
+      ((«id» _ _)
+       (set))
+      ((«lit» _ _)
+       (set))
+      ((«quo» _ _)
+       (set))
+      ((«lam» _ x e)
+       (let param-loop ((xs x))
+         (if (null? xs)
+             (ast-helper e)
+             (match (car xs)
+               ((«id» _ (== x)) (set))
+               (_ (param-loop (cdr xs)))))))
+      ((«let» _ («id» _ (== x)) e-init _)
+       (ast-helper e-init))
+      ((«let» _ _ e-init e-body)
+       (set-union (ast-helper e-init) (ast-helper e-body)))
+      ((«letrec» _ («id» _ (== x)) _ _)
+       (set))
+      ((«letrec» _ _ e-init e-body)
+       (set-union (ast-helper e-init) (ast-helper e-body)))
+      ((«if» _ ae e1 e2) (set-union (ast-helper ae) (ast-helper e1) (ast-helper e2)))
+      ((«set!» _ _ ae) (ast-helper ae))
+      ((«app» _ rator rands) (apply set-union (map ast-helper (cons rator rands))))
+      (_ (error "cannot handle expression" e))))
+  (ast-helper ast))
+      
+ 
+; system level
+              
+
+      
+    
+
 ;;; TESTS
 
-(define (test e expected)
-  (let ((result
-            (with-handlers ((exn:fail?
-                             (lambda (exc) (if (eq? expected 'FAIL)
-                                             'FAIL
-                                             (begin
-                                               (printf "unexpected failure for ~a:\n" e)
-                                               (raise exc))))))
-              (conc-eval e))))
-         (unless (equal? result expected)
-           (error (format "wrong result for ~a:\n\texpected ~a\n\tgot      ~a" e expected result)))))
+;(define (test-incremental e ast-update)
+;  (let* ((ast (compile e))
+;         (sys (explore ast conc-lattice))
+;         (parent (system-parent sys))
+;         (update (ast-update ast))
+;         (ast* (perform-ast-update ast update))
+;         (sys* (explore ast* conc-lattice))
+;         (parent* (system-parent sys*)))
+;    (incremental-update sys ast-update)))
+ 
 
-(test '123 123)
-(test '(let ((x 10)) x) 10)
-(test '(let ((x 10)) (let ((y 20)) y)) 20)
-(test '(let ((x 10)) (let ((y 20)) x)) 10)
-(test '(let ((x 10)) (let ((x 20)) x)) 20)
-(test '(let ((x 123)) (let ((u (let ((x #f)) "dummy"))) x)) 123)
-
-(test '(+ 1 1) 2)
-(test '(let ((x (+ 1 1))) x) 2)
-(test '(let ((x (let ((z 3)) z))) x) 3)
-(test '(let ((f (lambda () (- 5 3)))) (f)) 2)
-(test '(let ((f (lambda (x) (* x x)))) (f 4)) 16)
-(test '(let ((f (lambda (x) x))) (let ((v (+ 3 9))) v)) 12)
-(test '(let ((x 123)) (let ((f (lambda () x))) (f))) 123)
-(test '(let ((f (lambda (x) x))) (let ((v (f 999))) v)) 999)
-(test '(let ((g (lambda (v) v))) (let ((f (lambda (n) (let ((m (g 123))) (* m n))))) (f 2))) 246)
-(test '(let ((f (lambda (x) x))) (let ((u (f 1))) (f 2))) 2)
-(test '(let ((f (lambda (y) (let ((x y)) x)))) (let ((z (f "foo"))) (f 1))) 1)
-(test '(let ((f (lambda (x) (let ((v x)) v)))) (f 123)) 123)
-(test '(let ((f (lambda (x) (let ((i (lambda (a) a))) (i x))))) (let ((z1 (f 123))) (let ((z2 (f #t))) z2))) #t)
-
-(test '(if #t 1 2) 1)
-(test '(if #f 1 2) 2)
-(test '(if #t (+ 3 5) (- 4 6)) 8)
-(test '(if #f (+ 3 5) (- 4 6)) -2)
-(test '(let ((f (lambda (x) (* x x)))) (let ((v (f 4))) (if v (f 5) (f 6)))) 25)
-(test '(if #t (let ((x 1)) x) (let ((x 2)) x)) 1)
-(test '(if #f (let ((x 1)) x) (let ((x 2)) x)) 2)
-(test '(let ((x (if #t 1 2))) x) 1)
-(test '(let ((x (if #f 1 2))) x) 2)
-
-(test '(let ((f (lambda (x) (lambda (y) x)))) (let ((v (f 123))) (v 999))) 123)
-(test '(let ((f (lambda (x) (lambda (x) x)))) (let ((v (f 123))) (v 999))) 999)
-(test '(let ((f (lambda (g) (g 678)))) (let ((id (lambda (x) x))) (f id))) 678)
-(test '(let ((f (lambda (g x) (g x)))) (let ((id (lambda (x) x))) (f id 789))) 789)
-(test '(let ((f (lambda (g) (lambda (x) (g x))))) (let ((sq (lambda (x) (* x x)))) (let ((ff (f sq))) (ff 11)))) 121)
+;(test-incremental '(let ((x 1))
+;                     (let ((y (+ x 1)))
+;                       (let ((c (= y 2)))
+;                         (let ((z (if c (set! x 2) (set! x 3))))
+;                           (+ x y)))))
+;                  (lambda (ast)
+;                    (match-let (((«let» _ _ lit _) ast))
+;                      (replace lit (compile '2)))))
 
 
-(test '(letrec ((f (lambda (x) (if x "done" (f #t))))) (f #f)) "done")
-(test '(letrec ((f (lambda (x) (let ((v (= x 2))) (if v x (f (+ x 1))))))) (f 0)) 2)
-(test '(letrec ((fac (lambda (n) (let ((v (= n 0))) (if v 1 (let ((m (- n 1))) (let ((w (fac m))) (* n w)))))))) (fac 1)) 1)
-(test '(letrec ((fac (lambda (n) (let ((v (= n 0))) (if v 1 (let ((m (- n 1))) (let ((w (fac m))) (* n w)))))))) (fac 3)) 6)
-(test '(letrec ((fib (lambda (n) (let ((c (< n 2))) (if c n (let ((n1 (- n 1))) (let ((n2 (- n 2))) (let ((f1 (fib n1))) (let ((f2 (fib n2))) (+ f1 f2)))))))))) (fib 1)) 1)
-(test '(letrec ((fib (lambda (n) (let ((c (< n 2))) (if c n (let ((n1 (- n 1))) (let ((f1 (fib n1))) (let ((n2 (- n 2))) (let ((f2 (fib n2))) (+ f1 f2)))))))))) (fib 1)) 1)
-(test '(letrec ((fib (lambda (n) (let ((c (< n 2))) (if c n (let ((n1 (- n 1))) (let ((n2 (- n 2))) (let ((f1 (fib n1))) (let ((f2 (fib n2))) (+ f1 f2)))))))))) (fib 3)) 2)
-(test '(letrec ((fib (lambda (n) (let ((c (< n 2))) (if c n (let ((n1 (- n 1))) (let ((f1 (fib n1))) (let ((n2 (- n 2))) (let ((f2 (fib n2))) (+ f1 f2)))))))))) (fib 3)) 2)
-(test '(letrec ((count (lambda (n) (let ((t (= n 0))) (if t 123 (let ((u (- n 1))) (let ((v (count u))) v))))))) (count 8)) 123)
 
-(test 'x 'FAIL)
-(test '(let ((f (lambda () f))) (f)) 'FAIL)
 
-; set!
-(test '(let ((x 123)) (let ((u (if #t (set! x 456) (set! x 789)))) x)) 456)
-(test '(let ((x 123)) (let ((u (if #f (set! x 456) (set! x 789)))) x)) 789)
-(test '(let ((y 999)) (let ((x 123)) (let ((u (if x (set! y 456) (set! y 789)))) y))) 456)
-(test '(let ((x 123)) (let ((u (set! x 456))) x)) 456)
-(test '(let ((x 123)) (let ((u (set! x 456))) (let ((uu (set! x 789))) x))) 789)
-(test '(let ((x 123)) (let ((u (if x (set! x 456) (set! x 789)))) x)) 456)
-(test '(let ((x 123)) (let ((u (set! x #f))) (let ((uu (if x (set! x 456) (set! x 789)))) x))) 789)
-(test '(let ((x #t)) (let ((f (lambda () (set! x #f)))) (let ((u (f))) x))) #f)
-(test '(let ((x #t)) (let ((g (lambda () (set! x #f)))) (let ((f (lambda (h) (h)))) (let ((u (f g))) x)))) #f)
-(test '(let ((x 2)) (let ((f (lambda (y) (let ((oldx x)) (let ((_ (set! x y))) oldx))))) (f 1))) 2)
-(test '(let ((x 1)) (let ((f (lambda (y) (let ((oldx x)) (let ((_ (set! x y))) oldx))))) (let ((__ (f "foo"))) (f 1)))) "foo")
-(test '(let ((x 1)) (let ((f (lambda (y) (let ((oldx x)) (let ((_ (set! x y))) oldx))))) (let ((_ (f 1))) (let ((__ (f "foo"))) (f 1))))) "foo")
-(test '(let ((f (lambda (x) (let ((y (set! x "hoho"))) x)))) (f 1)) "hoho")
-(test '(let ((f (lambda (x) (let ((y (set! x "hehe"))) x)))) (let ((u (f 1))) (f 2))) "hehe")
-(test '(let ((x 123)) (let ((f (lambda (y) y))) (let ((v (set! x 456))) (let ((u (f v))) x)))) 456)
-(test '(let ((x 123)) (let ((f (lambda (x) x))) (let ((v (set! x 456))) (let ((u (f v))) x)))) 456)
-(test '(let ((x 123)) (let ((f (lambda (x y) x))) (let ((v (set! x 456))) (let ((u (f v 789))) x)))) 456)
-(test '(let ((x 123)) (let ((c (set! x 456))) (let ((u (if c 789 0))) x))) 456)
-(test '(let ((x 123)) (let ((c (set! x 456))) (let ((u (if c (set! x 789) (set! x 0)))) x))) 789)
-(test '(let ((x 123)) (let ((y (set! x 456))) x)) 456)
-(test '(let ((x 123)) (let ((y (set! x 456))) (let ((u (set! x 789))) x))) 789)
-(test '(let ((x 123)) (let ((y (set! x 456))) (let ((u (let ((z (set! x 789))) 0))) x))) 789)
-(test '(let ((x 123)) (let ((y (set! x 456))) (let ((u (set! x 0))) (let ((uu (let ((z (set! x 789))) 0))) x)))) 789)
+;(conc-eval
+; (compile '(let ((f (lambda () (let ((x 3)) x))))
+;             (let ((y (f)))
+;               y))))
+
+
+;(conc-eval
+; (compile '(let ((x 1))
+;             (let ((y (+ x 1)))
+;               (let ((c (= y 2)))
+;                 (let ((z (if c (set! x 2) (set! x 3))))
+;                   (+ x y)))))))
+
 
 
 ;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
