@@ -54,7 +54,7 @@
 
 
 (test-machine '(letrec ((f (lambda (x) (if x "done" (f #t))))) (f #f)) "done")
-(test-machine '(letrec ((f (lambda (x) (let ((v (= x 2))) (if v x (f (+ x 1))))))) (f 0)) 2)
+(test-machine '(letrec ((f (lambda (x) (let ((v (= x 2))) (if v x (let ((u (+ x 1))) (f u))))))) (f 0)) 2)
 (test-machine '(letrec ((fac (lambda (n) (let ((v (= n 0))) (if v 1 (let ((m (- n 1))) (let ((w (fac m))) (* n w)))))))) (fac 1)) 1)
 (test-machine '(letrec ((fac (lambda (n) (let ((v (= n 0))) (if v 1 (let ((m (- n 1))) (let ((w (fac m))) (* n w)))))))) (fac 3)) 6)
 (test-machine '(letrec ((fib (lambda (n) (let ((c (< n 2))) (if c n (let ((n1 (- n 1))) (let ((n2 (- n 2))) (let ((f1 (fib n1))) (let ((f2 (fib n2))) (+ f1 f2)))))))))) (fib 1)) 1)

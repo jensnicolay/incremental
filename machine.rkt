@@ -21,9 +21,9 @@
                                                    (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (prim-name s))))))
 (struct addr (a) #:transparent)
 (struct binding (e κ) #:transparent)
-(struct ctx (e d-proc n) #:transparent ; (e-app d-proc n)
- #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "<ctx ~v ~v>" (ctx-e v) (ctx-n v))))
+;(struct ctx (e d-proc n) #:transparent ; (e-app d-proc n)
+; #:property prop:custom-write (lambda (v p w?)
+;                                 (fprintf p "<ctx ~v ~v>" (ctx-e v) (ctx-n v))))
 (struct state (e κ) #:transparent)
 (struct system (graph parent) #:transparent)
 (struct graph (fwd bwd initial) #:transparent
@@ -81,7 +81,11 @@
 (define (state-exists? s g)
   (hash-ref (graph-fwd g) s #f))
 
+(define (body-expression? e parent)
+  («lam»? (parent e)))
+
 (define (ev e s g lat parent) ; general TODO: every fw movement should be restrained to previous path(s)
+
   ;(printf "ev ~v in ~v\n" e s)
   (match e
     ((«lit» _ d)
@@ -132,7 +136,7 @@
                    d)
                (let ((s* (set-first W)))
                  (match s*
-                   ((state e-body (ctx (== e) _ _))
+                   ((state (? (lambda (e) (body-expression? e parent)) e-body) _)
                     ;(printf "\t~v: compound app with body ~v\n" e e-body)
                     (loop (set-rest W) ((lattice-⊔ lat) d (ev e-body s* g lat parent)) prim))
                    (_
@@ -250,9 +254,9 @@
                                    ((«if» _ _ _ _)
                                     (prs-loop (set-rest prs) (set-add W s-pr) d))
                                    ((«app» _ _ _)
-                                    (if (and (equal? e (ctx-e (state-κ s))) ; s-pr is compound call, s is proc entry
+                                    (if (and (body-expression? (state-e s) parent) ; s-pr is compound call, s is proc entry
                                              (equal? (state-κ s) κ-β))
-                                        (let* ((e-proc (clo-e (ctx-d-proc (state-κ s))))
+                                        (let* ((e-proc (parent (state-e s)))
                                                (xs («lam»-x e-proc)))
                                           (let param-loop ((xs xs) (e-args («app»-aes e)))
                                             (if (null? xs)
@@ -306,22 +310,19 @@
     (set! bwd (for/fold ((bwd bwd)) ((to (in-set tos)))
                 (hash-set bwd to (set-add (hash-ref bwd to (set)) from)))))
      
-  (define (stack-pop s)
-    (match s
-      ((state _ κ)
-       (let ((e-app (ctx-e κ)))
-         (let graph-bw ((W (hash-ref bwd s)) (S (set)) (κs (set)))
-           (if (set-empty? W)
-               κs
-               (let ((s (set-first W)))
-                 ;(printf "popping ~v\n" s)
-                 (if (set-member? S s)
-                     (graph-bw (set-rest W) S κs)
-                     (match s
-                       ((state (== e-app) κ*)
-                        (graph-bw (set-rest W) (set-add S s) (set-add κs (state-κ s))))
-                       (_
-                        (graph-bw (set-union (set-rest W) (hash-ref bwd s (set))) (set-add S s) κs)))))))))))
+  (define (stack-pop s κ)
+    (let graph-bw ((W (set s)) (S (set)) (S-app (set)))
+      (if (set-empty? W)
+          S-app
+          (let ((s (set-first W)))
+            ;(printf "popping ~a\n" s) 
+            (if (set-member? S s)
+                (graph-bw (set-rest W) S S-app)
+                (match s
+                  ((state (? (lambda (e) (body-expression? e parent))) (== κ))
+                   (graph-bw (set-rest W) (set-add S s) (set-union S-app (hash-ref bwd s))))
+                  (_
+                   (graph-bw (set-union (set-rest W) (hash-ref bwd s (set))) (set-add S s) S-app))))))))
                
       
   (define (cont e κ)
@@ -343,10 +344,10 @@
         ((«if» _ _ _ (== e))
          (cont p κ))
         ((«lam» _ _ (== e))
-         (let ((κs (stack-pop (state e κ))))
+         (let ((S-app (stack-pop (state e κ) κ)))
            ;(printf "pop e ~v κ ~v = ~v\n" e κ κs)
-           (for/fold ((S-succ (set))) ((κ* (in-set κs)))
-             (set-union S-succ (cont (ctx-e κ) κ*)))))
+           (for/fold ((S-succ (set))) ((s-app (in-set S-app)))
+             (set-union S-succ (cont (state-e s-app) (state-κ s-app))))))
         (#f (set)))))
   
   (define (step s)
@@ -379,7 +380,7 @@
                  S-succ
                  (match (set-first W)
                    ((clo («lam» _ _ e-body))
-                    (let* ((κ* (ctx e d-proc (count!))) ; TODO ctxs hardcoded as concrete
+                    (let* ((κ* (count!)) ; TODO ctxs hardcoded as concrete
                            (s* (state e-body κ*)))
                       (when (state-exists? s* g)
                         (set! Δi (add1 Δi)))
@@ -445,7 +446,7 @@
 
                         ;
     
-  (let ((s0 (state e (ctx #f #f (count!)))))
+  (let ((s0 (state e (count!))))
     (explore! (set s0) (set))
     (system (graph fwd bwd s0) parent))) ;incremental-update)))
 
@@ -558,6 +559,10 @@
 
 
 
+;(conc-eval
+; (compile '(letrec ((f (lambda (x) (let ((v (= x 2))) (if v x (let ((u (+ x 1))) (f u))))))) (f 0))))
+
+
 
 ;(conc-eval
 ; (compile '(let ((f (lambda () (let ((x 3)) x))))
@@ -565,12 +570,12 @@
 ;               y))))
 
 
-;(conc-eval
-; (compile '(let ((x 1))
-;             (let ((y (+ x 1)))
-;               (let ((c (= y 2)))
-;                 (let ((z (if c (set! x 2) (set! x 3))))
-;                   (+ x y)))))))
+(conc-eval
+ (compile '(let ((x 1))
+             (let ((y (+ x 1)))
+               (let ((c (= y 2)))
+                 (let ((z (if c (set! x 2) (set! x 3))))
+                   (+ x y)))))))
 
 
 
