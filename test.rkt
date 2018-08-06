@@ -21,6 +21,7 @@
 (test-machine '(let ((x 10)) (let ((y 20)) x)) 10)
 (test-machine '(let ((x 10)) (let ((x 20)) x)) 20)
 (test-machine '(let ((x 123)) (let ((u (let ((x #f)) "dummy"))) x)) 123)
+(test-machine '(let ((x 123)) (let ((u (let ((y "dummy")) (let ((x #f)) "dummy2")))) x)) 123)
 
 (test-machine '(+ 1 1) 2)
 (test-machine '(let ((x (+ 1 1))) x) 2)
@@ -29,6 +30,7 @@
 (test-machine '(let ((f (lambda (x) (* x x)))) (f 4)) 16)
 (test-machine '(let ((f (lambda (x) x))) (let ((v (+ 3 9))) v)) 12)
 (test-machine '(let ((x 123)) (let ((f (lambda () x))) (f))) 123)
+(test-machine '(let ((x 123)) (let ((f (lambda () x))) (let ((x 999)) (f)))) 123)
 (test-machine '(let ((f (lambda (x) x))) (let ((v (f 999))) v)) 999)
 (test-machine '(let ((g (lambda (v) v))) (let ((f (lambda (n) (let ((m (g 123))) (* m n))))) (f 2))) 246)
 (test-machine '(let ((f (lambda (x) x))) (let ((u (f 1))) (f 2))) 2)
@@ -90,6 +92,7 @@
 (test-machine '(let ((x 123)) (let ((y (set! x 456))) (let ((u (set! x 789))) x))) 789)
 (test-machine '(let ((x 123)) (let ((y (set! x 456))) (let ((u (let ((z (set! x 789))) 0))) x))) 789)
 (test-machine '(let ((x 123)) (let ((y (set! x 456))) (let ((u (set! x 0))) (let ((uu (let ((z (set! x 789))) 0))) x)))) 789)
+(test-machine '(let ((x 123)) (let ((f (lambda () x))) (let ((u (set! x 456))) (f)))) 456)
 
 
 
