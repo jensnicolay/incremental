@@ -53,6 +53,14 @@
 (test-machine '(let ((f (lambda (g) (g 678)))) (let ((id (lambda (x) x))) (f id))) 678)
 (test-machine '(let ((f (lambda (g x) (g x)))) (let ((id (lambda (x) x))) (f id 789))) 789)
 (test-machine '(let ((f (lambda (g) (lambda (x) (g x))))) (let ((sq (lambda (x) (* x x)))) (let ((ff (f sq))) (ff 11)))) 121)
+(test-machine '(let ((f (lambda (n) (let ((x n)) (lambda () x))))) (let ((f0 (f 0))) (let ((f1 (f 1))) (let ((u (f1))) (f0))))) 0)
+(test-machine '(let ((g #f)) (let ((f (lambda (n) (let ((x n)) (let ((u (if g 123 (set! g (lambda (y) (set! x y)))))) (lambda () x))))))
+                               (let ((f0 (f 0)))
+                                 (let ((u (g 9)))
+                                   (let ((f1 (f 1)))
+                                     (let ((u (f1)))
+                                       (f0))))))) 9)
+
 
 
 (test-machine '(letrec ((f (lambda (x) (if x "done" (f #t))))) (f #f)) "done")

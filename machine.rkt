@@ -12,15 +12,15 @@
 
 (struct letk (x e ρ) #:transparent)
 (struct letreck (x e ρ) #:transparent)
-(struct clo (e) #:transparent
-  #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "<clo ~v>" (clo-e v))))
+;(struct clo (e) #:transparent
+ ; #:property prop:custom-write (lambda (v p w?)
+  ;                               (fprintf p "<clo ~v>" (clo-e v))))
 (struct prim (name proc) #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
                                                                         (equal? (prim-name s1) (prim-name s2))))
                                                    (define hash-proc (lambda (s rhash) (equal-hash-code (prim-name s))))
                                                    (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (prim-name s))))))
 (struct addr (a) #:transparent)
-(struct binding (e κ) #:transparent)
+(struct binding (x e κ) #:transparent)
 ;(struct ctx (e d-proc n) #:transparent ; (e-app d-proc n)
 ; #:property prop:custom-write (lambda (v p w?)
 ;                                 (fprintf p "<ctx ~v ~v>" (ctx-e v) (ctx-n v))))
@@ -84,6 +84,7 @@
 (define (body-expression? e parent)
   («lam»? (parent e)))
 
+
 (define (ev e s g lat parent) ; general TODO: every fw movement should be restrained to previous path(s)
 
   ;(printf "ev ~v in ~v\n" e s)
@@ -96,8 +97,8 @@
        ;(printf "-> ~v\n" d)
        d))
     ((«lam» _ _ _)
-     ;(printf "-> clo ~v\n" e)
-     ((lattice-α lat) (clo e)))
+     ;(printf "-> clo ~v\n" s)
+     ((lattice-α lat) s))
     ((«let» _ _ _ e-body)
      (let graph-fw ((W (successors s g)) (S (set)) (d (lattice-⊥ lat)))
        (if (set-empty? W)
@@ -142,139 +143,162 @@
                    (_
                     (loop (set-rest W) d #t)))))))))))
 
+(define (graph-find g s dir e κ)
+  (let graph-fw ((W (dir s g)) (S (set)) (res (set)))
+    (if (set-empty? W)
+        res
+        (let ((s* (set-first W)))
+          (if (set-member? S s*)
+              (graph-fw (set-rest W) S res)
+              (match s*
+                ((state (== e) (== κ))
+                 (graph-fw (set-rest W) (set-add S s*) (set-add res s*)))
+                (_
+                 (graph-fw (set-union W (dir s* g)) (set-add S s*) res))))))))
+
+(define (graph-find-fw g s e κ)
+  (graph-find g s successors e κ))
+
+(define (graph-find-bw g s e κ)
+  (graph-find g s predecessors e κ))
+
 (define (lookup-static x s g lat parent)
   ;(printf "lookup-static ~v ~v\n" x s)
 
-  (define (ast-helper e κ)
-    (let ((pa (parent e)))
+  (define (ast-helper W B)
+    (if (set-empty? W)
+        B
+        (let* ((s (set-first W))
+               (e (state-e s))
+               (κ (state-κ s))
+               (pa (parent e)))
       ;(printf "ast-helper ~v e ~v pa ~v\n" x e pa)
       (match pa
         ((«let» _ _ (== e) _)
-         (ast-helper pa κ))
+         (ast-helper (set-union (set-rest W) (graph-find-bw g s pa κ)) B))
         ((«let» _ (and e-decl («id» _ (== x))) _ _)
-         (set (binding e-decl κ)))
+         (ast-helper (set-rest W) (set-add B (binding x e-decl κ))))
         ((«let» _ _ _ _)
-         (ast-helper pa κ))
+         (ast-helper (set-union (set-rest  W) (graph-find-bw g s pa κ)) B))
         ((«letrec» _ (and e-decl («id» _ (== x))) _ _)
-         (set (binding e-decl κ)))
+         (ast-helper (set-rest W) (set-add B (binding x e-decl κ))))
         ((«letrec» _ _ _ _)
-         (ast-helper pa κ))
+         (ast-helper (set-union (set-rest W) (graph-find-bw g s pa κ)) B))
         ((«app» _ _ _)
-         (ast-helper pa κ))
+         (ast-helper (set-union (set-rest W) (graph-find-bw g s pa κ)) B))
         ((«if» _ _ _ _)
-         (ast-helper pa κ))
+         (ast-helper (set-union (set-rest W) (graph-find-bw g s pa κ)) B))
         ((«set!» _ _ (== e))
-         (ast-helper pa κ))
-        ((«lam» _ (list xs ...) _)
+         (ast-helper (set-union (set-rest W) (graph-find-bw g s pa κ)) B))
+        ((«lam» _ (list xs ...) _) ; s evals body exp
          (let param-loop ((xs xs))
            (if (null? xs)
-               (find-lambda pa s (set))
+               (ast-helper (set-union (set-rest W) (find-lambda s pa)) B)
                (let ((e-decl (car xs)))
                  (match e-decl
                    ((«id» _ (== x))
-                    (set (binding e-decl κ)))
+                    (ast-helper (set-rest W) (set-add B (binding x e-decl κ))))
                    (_
                     (param-loop (cdr xs))))))))
-        (#f (set (binding («id» -1 x) 'unbound))) ; no static decl found: keep prim name `x`
-        (_ (error "cannot handle expression" pa)))))
+        (#f (ast-helper (set-rest W) (set-add B (binding x #f #f)))) ; no static decl found
+        (_ (error "cannot handle expression" pa))))))
 
-  (define (find-lambda e-lam s S)
-    ;(printf "find-lambda ~v ~v\n" e-lam s)
-    (let loop ((W (predecessors s g)) (S S) (res (set)))
+  (define (find-lambda s pa) ; s should eval body expr
+    ;(printf "find-lambda ~v ~v\n" s pa)
+    (let graph-pr ((W (predecessors s g)) (res (set)))
       (if (set-empty? W)
           res
-          (let ((s (set-first W)))
-            ;(printf "lam ~v\n" s)
-            (match s
-              ((state (== e-lam) κ)
-               ;(printf "found lam ~v => ~v\n" e-lam s)
-               (loop (set-rest W) (set-add S s) (set-union res (ast-helper e-lam κ))))
-              (_ (loop (set-union (set-rest W) (predecessors s g)) (set-add S s) res)))))))
-  
-  (let ((res (ast-helper (state-e s) (state-κ s))))
+          (let ((s-pr (set-first W)))
+            ;(printf "compound app state ~v\n" s-pr)
+            (match s-pr 
+              ((state («app» _ e-rator _) _)
+               (let ((d-rators (ev e-rator s-pr g lat parent)))
+                 ;(printf "d-rators ~v\n" d-rators)
+                 ((lattice-γ lat) d-rators))))))))
+
+   
+  (let ((res (ast-helper (set s) (set))))
     ;(printf "looked up static ~v = ~v\n" x res)
     res))
 
-(define (lookup-dynamic β s g lat parent)
-  ;(printf "lookup-dynamic ~v ~v\n" β s)
-
-  (match-let (((binding e-β κ-β) β))
+(define (lookup-dynamic b s g lat parent)
+  ;(printf "lookup-dynamic ~v ~v\n" b s)
+  (match-let (((binding x e-b κ-b) b))
     (let loop ((W (set s)) (S (set)) (d (lattice-⊥ lat)))
       (if (set-empty? W)
-          d
-          (let ((s (set-first W)))
-            (if (set-member? S s)
-                (loop (set-rest W) S d)
-                (let ((prs (predecessors s g)))
-                  (if (set-empty? prs)
-                      (let ((prim-cons (assoc («id»-x e-β) (lattice-global lat))))
-                        (match prim-cons
-                          ((cons _ d-prim)
-                           (loop (set-rest W) (set-add S s) ((lattice-⊔ lat) d d-prim)))
-                          (#f
-                           (error "unbound variable" («id»-x e-β)))))
-                      (let prs-loop ((prs prs) (W (set-rest W)) (d d))
-                        (if (set-empty? prs)
-                            (loop W (set-add S s) d)
-                            (let ((s-pr (set-first prs)))
-                              (match s-pr
-                                ((state e κ)
-                                 ;(printf "dyn ~v\n" s-pr)
-                                 (match e
-                                   ((«lit» _ _)
-                                    (prs-loop (set-rest prs) (set-add W s-pr) d))
-                                   ((«lam» _ _ _)
-                                    (prs-loop (set-rest prs) (set-add W s-pr) d))
-                                   ((«let» _ (== e-β) e-init _)
-                                    (if (equal? κ κ-β)
-                                        (prs-loop (set-rest prs) W ((lattice-⊔ lat) d (ev e-init s g lat parent)))
-                                        (prs-loop (set-rest prs) (set-add W s-pr) d)))
-                                   ((«let» _ _ _ _)
-                                    (prs-loop (set-rest prs) (set-add W s-pr) d))
-                                   ((«letrec» _ (== e-β) e-init _)
-                                    (if (equal? κ κ-β)
-                                        (prs-loop (set-rest prs) W ((lattice-⊔ lat) d (ev e-init s g lat parent)))
-                                        (prs-loop (set-rest prs) (set-add W s-pr) d)))
-                                   ((«letrec» _ _ _ _)
-                                    (prs-loop (set-rest prs) (set-add W s-pr) d))
-                                   ((«set!» _ («id» _ (== («id»-x e-β))) e-init)
-                                    (let ((B (lookup-static («id»-x e-β) s-pr g lat parent)))
-                                      ;(printf "β ~v\nB ~v\n" β B)
-                                      (let binding-loop ((B B) (W W) (d d))
-                                        (if (set-empty? B)
-                                            (prs-loop (set-rest prs) W d)
-                                            (let ((β* (set-first B)))
-                                              (if (equal? β β*)
-                                                  (binding-loop (set-rest B) W ((lattice-⊔ lat) d (ev e-init s-pr g lat parent)))
-                                                  (binding-loop (set-rest B) (set-add W s-pr) d)))))))
-                                   ((«set!» _ _ _)
-                                    (prs-loop (set-rest prs) (set-add W s-pr) d))
-                                   ((«id» _ _)
-                                    (prs-loop (set-rest prs) (set-add W s-pr) d))
-                                   ((«if» _ _ _ _)
-                                    (prs-loop (set-rest prs) (set-add W s-pr) d))
-                                   ((«app» _ _ _)
-                                    (if (and (body-expression? (state-e s) parent) ; s-pr is compound call, s is proc entry
-                                             (equal? (state-κ s) κ-β))
-                                        (let* ((e-proc (parent (state-e s)))
-                                               (xs («lam»-x e-proc)))
-                                          (let param-loop ((xs xs) (e-args («app»-aes e)))
-                                            (if (null? xs)
-                                                (prs-loop (set-rest prs) (set-add W s-pr) d)
-                                                (if (equal? (car xs) e-β)
-                                                    (prs-loop (set-rest prs) W ((lattice-⊔ lat) d (ev (car e-args) s-pr g lat parent)))
-                                                    (param-loop (cdr xs) (cdr e-args))))))
-                                        (prs-loop (set-rest prs) (set-add W s-pr) d)))
-                                   ))
-                                ))))))))))))
-    
+           d
+           (let ((s (set-first W)))
+             (if (set-member? S s)
+                 (loop (set-rest W) S d)
+                 (let ((prs (predecessors s g)))
+                   (if (set-empty? prs)
+                       (let ((prim-cons (assoc x (lattice-global lat))))
+                         (match prim-cons
+                           ((cons _ d-prim)
+                            (loop (set-rest W) (set-add S s) ((lattice-⊔ lat) d d-prim)))
+                           (#f (error "unbound variable" x))))
+                       (let prs-loop ((prs prs) (W (set-rest W)) (d d))
+                         (if (set-empty? prs)
+                             (loop W (set-add S s) d)
+                             (let ((s-pr (set-first prs)))
+                               (match s-pr
+                                 ((state e κ)
+                                  ;(printf "dyn ~v\n" s-pr)
+                                  (match e
+                                    ((«lit» _ _)
+                                     (prs-loop (set-rest prs) (set-add W s-pr) d))
+                                    ((«lam» _ _ _)
+                                     (prs-loop (set-rest prs) (set-add W s-pr) d))
+                                    ((«let» _ (== e-b) e-init _)
+                                     (if (equal? κ κ-b)
+                                         (prs-loop (set-rest prs) W ((lattice-⊔ lat) d (ev e-init s g lat parent)))
+                                         (prs-loop (set-rest prs) (set-add W s-pr) d)))
+                                    ((«let» _ _ _ _)
+                                     (prs-loop (set-rest prs) (set-add W s-pr) d))
+                                    ((«letrec» _ (== e-b) e-init _)
+                                     (if (equal? κ κ-b)
+                                         (prs-loop (set-rest prs) W ((lattice-⊔ lat) d (ev e-init s g lat parent)))
+                                         (prs-loop (set-rest prs) (set-add W s-pr) d)))
+                                    ((«letrec» _ _ _ _)
+                                     (prs-loop (set-rest prs) (set-add W s-pr) d))
+                                    ((«set!» _ («id» _ (== x)) e-init)
+                                     (let ((B (lookup-static x s-pr g lat parent)))
+                                       ;(printf "β ~v\nB ~v\n" β B)
+                                       (let binding-loop ((B B) (W W) (d d))
+                                         (if (set-empty? B)
+                                             (prs-loop (set-rest prs) W d)
+                                             (let ((b* (set-first B)))
+                                               (if (equal? b b*)
+                                                   (binding-loop (set-rest B) W ((lattice-⊔ lat) d (ev e-init s-pr g lat parent)))
+                                                   (binding-loop (set-rest B) (set-add W s-pr) d)))))))
+                                    ((«set!» _ _ _)
+                                     (prs-loop (set-rest prs) (set-add W s-pr) d))
+                                    ((«id» _ _)
+                                     (prs-loop (set-rest prs) (set-add W s-pr) d))
+                                    ((«if» _ _ _ _)
+                                     (prs-loop (set-rest prs) (set-add W s-pr) d))
+                                    ((«app» _ _ _)
+                                     (if (and (body-expression? (state-e s) parent) ; s-pr is compound call, s is proc entry
+                                              (equal? (state-κ s) κ-b))
+                                         (let* ((e-proc (parent (state-e s)))
+                                                (xs («lam»-x e-proc)))
+                                           (let param-loop ((xs xs) (e-args («app»-aes e)))
+                                             (if (null? xs)
+                                                 (prs-loop (set-rest prs) (set-add W s-pr) d)
+                                                 (if (equal? (car xs) e-b)
+                                                     (prs-loop (set-rest prs) W ((lattice-⊔ lat) d (ev (car e-args) s-pr g lat parent)))
+                                                     (param-loop (cdr xs) (cdr e-args))))))
+                                         (prs-loop (set-rest prs) (set-add W s-pr) d)))
+                                    ))
+                                 ))))))))))))  
   
 (define (lookup-variable x s g lat parent)
   ;(printf "lookup-variable ~v ~v\n" x s)
-  (let loop ((W (lookup-static x s g lat parent)) (d (lattice-⊥ lat)))
-    (if (set-empty? W)
-        d
-        (loop (set-rest W) ((lattice-⊔ lat) d (lookup-dynamic (set-first W) s g lat parent))))))
+  (let ((S-decl (lookup-static x s g lat parent)))
+    (let loop ((W S-decl) (d (lattice-⊥ lat)))
+      (if (set-empty? W)
+          d
+          (loop (set-rest W) ((lattice-⊔ lat) d (lookup-dynamic (set-first W) s g lat parent)))))))
 
 (define (explore e lat)
 
@@ -284,9 +308,6 @@
   (define fwd (hash))
   (define bwd (hash))
   
-  ;(define Ξ (hash #f (set)))
-  ;(define Ξi 0)
-
   (define Δi 0)
   
   (define α (lattice-α lat))
@@ -379,8 +400,14 @@
              (if (set-empty? W)
                  S-succ
                  (match (set-first W)
-                   ((clo («lam» _ _ e-body))
+                   ((state («lam» _ _ e-body) _)
                     (let* ((κ* (count!)) ; TODO ctxs hardcoded as concrete
+                           (s* (state e-body κ*)))
+                      (when (state-exists? s* g)
+                        (set! Δi (add1 Δi)))
+                      (loop (set-rest W) (set-add S-succ s*))))
+                   ((state («set!» _ _ («lam» _ _ e-body)) _)
+                    (let* ((κ* (count!)) ; CLONE (caused by atomic-only set!)
                            (s* (state e-body κ*)))
                       (when (state-exists? s* g)
                         (set! Δi (add1 Δi)))
@@ -564,18 +591,41 @@
 
 
 
-;(conc-eval
-; (compile '(let ((f (lambda () (let ((x 3)) x))))
-;             (let ((y (f)))
-;               y))))
-
 
 (conc-eval
- (compile '(let ((x 1))
-             (let ((y (+ x 1)))
-               (let ((c (= y 2)))
-                 (let ((z (if c (set! x 2) (set! x 3))))
-                   (+ x y)))))))
+ (compile '(let ((g #f))
+             (let ((f (lambda (n)
+                        (let ((x n))
+                          (let ((u (if g
+                                       123
+                                       (set! g (lambda (y) (set! x y))))))
+                            (lambda () x))))))
+               (let ((f0 (f 0)))
+                 (let ((u (g 9)))
+                   (let ((f1 (f 1)))
+                     (let ((u (f1)))
+                       (f0)))))))))
+
+ (let ((g #f))
+   (let ((f (lambda (n)
+              (let ((x n))
+                (let ((u (if g
+                             123
+                             (set! g (lambda (y) (set! x y))))))
+                  (lambda () x))))))
+     (let ((f0 (f 0)))
+       (let ((u (g 9)))
+         (let ((f1 (f 1)))
+           (let ((u (f1)))
+             (f0)))))))
+
+
+;(conc-eval
+; (compile '(let ((x 1))
+;             (let ((y (+ x 1)))
+;               (let ((c (= y 2)))
+;                 (let ((z (if c (set! x 2) (set! x 3))))
+;                   (+ x y)))))))
 
 
 
