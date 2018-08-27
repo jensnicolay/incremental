@@ -102,7 +102,57 @@
 (test-machine '(let ((x 123)) (let ((y (set! x 456))) (let ((u (set! x 0))) (let ((uu (let ((z (set! x 789))) 0))) x)))) 789)
 (test-machine '(let ((x 123)) (let ((f (lambda () x))) (let ((u (set! x 456))) (f)))) 456)
 
+; cons car cdr
+(test-machine '(let ((x (cons 1 2))) (car x)) 1)
+(test-machine '(let ((x (cons 1 2))) (cdr x)) 2)
 
+; set-car! set-cdr!
+(test-machine '(let ((x (cons 1 2)))
+                 (let ((u (set-car! x 9)))
+                   (car x)))
+              9)
+
+(test-machine '(let ((x (cons 1 2)))
+                 (let ((u (set-cdr! x 9)))
+                   (cdr x)))
+              9)
+
+(test-machine '(let ((yy (cons 1 2)))
+                 (let ((y (cons 3 yy)))
+                   (let ((x (cdr y)))
+                     (let ((z (cdr y)))
+                       (let ((u (set-car! z 123)))
+                         (let ((uu (set-car! x 9)))
+                           (let ((zz (cdr y)))
+                             (car zz))))))))
+              9)
+
+(test-machine '(let ((y (cons 1 2)))
+                 (let ((y (cons 3 y)))
+                   (let ((x (cdr y)))
+                     (let ((z (cdr y)))
+                       (let ((u (set-car! z 123)))
+                         (let ((u (set-car! x 9)))
+                           (let ((z (cdr y)))
+                             (car z))))))))
+              9)
+
+(test-machine '(let ((x (cons 2 3)))
+             (let ((y (cons 1 x)))
+               (let ((m (cdr y)))
+                 (let ((u (set-car! x 9)))
+                   (car m)))))
+              9)
+
+(test-machine '(let ((z (cons 0 1)))
+                 (let ((x (cons 2 3)))
+                   (let ((y (cons 1 x)))
+                     (let ((yy (cons 4 z)))
+                       (let ((u (set! y yy)))
+                         (let ((m (cdr y)))
+                           (let ((uu (set-car! x 9)))
+                             (car m))))))))
+              0)
 
                   
                   
