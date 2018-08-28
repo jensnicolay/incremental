@@ -37,6 +37,7 @@
 (test-machine '(let ((f (lambda (y) (let ((x y)) x)))) (let ((z (f "foo"))) (f 1))) 1)
 (test-machine '(let ((f (lambda (x) (let ((v x)) v)))) (f 123)) 123)
 (test-machine '(let ((f (lambda (x) (let ((i (lambda (a) a))) (i x))))) (let ((z1 (f 123))) (let ((z2 (f #t))) z2))) #t)
+;(test-machine '((lambda (x) (* x x)) 4) 16)
 
 (test-machine '(if #t 1 2) 1)
 (test-machine '(if #f 1 2) 2)
@@ -105,6 +106,10 @@
 ; cons car cdr
 (test-machine '(let ((x (cons 1 2))) (car x)) 1)
 (test-machine '(let ((x (cons 1 2))) (cdr x)) 2)
+(test-machine '(let ((v (cons 2 3))) (let ((o (cons 1 v))) (let ((w (cdr o))) (car w)))) 2)
+(test-machine '(let ((v (cons 2 3))) (let ((o (cons v 1))) (let ((w (car o))) (car w)))) 2)
+(test-machine '(let ((v (cons 2 3))) (let ((o (cons 1 v))) (let ((v (cdr o))) (cdr v)))) 3)
+
 
 ; set-car! set-cdr!
 (test-machine '(let ((x (cons 1 2)))
@@ -116,6 +121,9 @@
                  (let ((u (set-cdr! x 9)))
                    (cdr x)))
               9)
+
+(test-machine '(let ((o (cons 1 2))) (let ((v o)) (let ((u (set-car! v 3))) (car o)))) 3)
+;(test-machine '(let ((o (cons 1 2))) (let ((f (lambda () o))) (let ((u (set-car! o 3))) (let ((w (f))) (car w))))) 3)
 
 (test-machine '(let ((yy (cons 1 2)))
                  (let ((y (cons 3 yy)))
@@ -154,7 +162,7 @@
                              (car m))))))))
               0)
 
-                  
+
                   
                   
                                                         

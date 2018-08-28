@@ -356,12 +356,17 @@
             (lookup-root-expression-B («id»-x e-cdr) access* s g lat parent)
             (set (cons e-cdr (state-κ s)))))
        ))
-    ((«car» _ («id» x-car _))
+    ((«car» _ («id» _ x-car))
      (lookup-root-expression-B x-car (cons 'car access) s g lat parent))
     ((«cdr» _ («id» _ x-cdr))
      (lookup-root-expression-B x-cdr (cons 'cdr access) s g lat parent))
     ((«id» _ x)
      (lookup-root-expression-B x access s g lat parent))
+    ;((«app» _ e-rator e-rands)
+    ; (let ((S-succ (successors s g)))
+    ;   (let succ-loop ((S-succ S-succ) (E (set)))
+    ;     (if (set-empty? succ-loop)
+             
     ))
 
 (define (lookup-root-expression-B x access s g lat parent)
@@ -826,18 +831,10 @@
 ; (compile '(letrec ((f (lambda (x) (let ((v (= x 2))) (if v x (let ((u (+ x 1))) (f u))))))) (f 0))))
 
 
-(conc-eval
- (compile
-  '(let ((z (cons 0 1)))
-     (let ((x (cons 2 3)))
-       (let ((y (cons 1 x)))
-         (let ((yy (cons 4 z)))
-           (let ((u (set! y yy)))
-             (let ((m (cdr y)))
-               (let ((uu (set-car! x 9)))
-                 (car m))))))))
-
-          ))
+;(conc-eval
+; (compile
+;  '(let ((o (cons 1 2))) (let ((f (lambda () o))) (let ((u (set-car! o 3))) (let ((w (f))) (car w)))))
+;  ))
            
 
 
