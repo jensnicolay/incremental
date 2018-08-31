@@ -123,7 +123,7 @@
               9)
 
 (test-machine '(let ((o (cons 1 2))) (let ((v o)) (let ((u (set-car! v 3))) (car o)))) 3)
-;(test-machine '(let ((o (cons 1 2))) (let ((f (lambda () o))) (let ((u (set-car! o 3))) (let ((w (f))) (car w))))) 3)
+(test-machine '(let ((o (cons 1 2))) (let ((f (lambda () o))) (let ((u (set-car! o 3))) (let ((w (f))) (car w))))) 3)
 
 (test-machine '(let ((yy (cons 1 2)))
                  (let ((y (cons 3 yy)))

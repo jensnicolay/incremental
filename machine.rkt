@@ -305,11 +305,9 @@
     ((«id» _ x)
      (let ((b (lookup-static x s g parent)))
        (lookup-root-expression b access s g parent)))
-    ;((«app» _ e-rator e-rands)
-    ; (let ((S-succ (successors s g)))
-    ;   (let succ-loop ((S-succ S-succ) (E (set)))
-    ;     (if (set-empty? succ-loop)
-             
+    ((«app» _ e-rator e-rands)
+     (let ((s* (successor (successor s g) g)))
+       (dobido (state-e s*) access s* g parent)))
     ))
 
 (define (lookup-root-expression b access s g parent)
@@ -584,7 +582,7 @@
 (module+ main
  (conc-eval
   (compile
-   '(let ((v (cons 2 3))) (let ((o (cons 1 v))) (let ((w (cdr o))) (car w)))))))
+   '(let ((o (cons 1 2))) (let ((f (lambda () o))) (let ((u (set-car! o 3))) (let ((w (f))) (car w))))))))
 
 
 ;(conc-eval
