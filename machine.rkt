@@ -513,50 +513,13 @@
 
 ;;; TESTS
 
-;(define (test-incremental e ast-update)
-;  (let* ((ast (compile e))
-;         (sys (explore ast conc-lattice))
-;         (parent (system-parent sys))
-;         (update (ast-update ast))
-;         (ast* (perform-ast-update ast update))
-;         (sys* (explore ast* conc-lattice))
-;         (parent* (system-parent sys*)))
-;    (incremental-update sys ast-update)))
- 
-
-;(test-incremental '(let ((x 1))
-;                     (let ((y (+ x 1)))
-;                       (let ((c (= y 2)))
-;                         (let ((z (if c (set! x 2) (set! x 3))))
-;                           (+ x y)))))
-;                  (lambda (ast)
-;                    (match-let (((«let» _ _ lit _) ast))
-;                      (replace lit (compile '2)))))
-
-
 (module+ main
  (conc-eval
-  (compile
-   '(let ((f (lambda () (lambda (x) (* x x)))))
-      (let ((g (f)))
-        (g 4))))))
-               
-
-;(conc-eval
-; (compile
-;  '(let ((o (cons 1 2))) (let ((f (lambda () o))) (let ((u (set-car! o 3))) (let ((w (f))) (car w)))))
-;  ))
-           
-
-
-;(conc-eval
-; (compile '(let ((x 1))
-;             (let ((y (+ x 1)))
-;               (let ((c (= y 2)))
-;                 (let ((z (if c (set! x 2) (set! x 3))))
-;                   (+ x y)))))))
-
-
+  (compile '(let ((x 1))
+             (let ((y (+ x 1)))
+               (let ((c (= y 2)))
+                 (let ((z (if c (set! x 2) (set! x 3))))
+                   (+ x y))))))))
 
 ;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
 ;;;; THEREFORE: we only allow aes as update exps

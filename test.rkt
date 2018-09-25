@@ -99,6 +99,7 @@
 (test-machine '(let ((x 123)) (let ((f (lambda (x y) x))) (let ((v (set! x 456))) (let ((u (f v 789))) x)))) 456)
 (test-machine '(let ((x 123)) (let ((c (set! x 456))) (let ((u (if c 789 0))) x))) 456)
 (test-machine '(let ((x 123)) (let ((c (set! x 456))) (let ((u (if c (set! x 789) (set! x 0)))) x))) 789)
+(test-machine '(let ((x 1)) (let ((y (+ x 1))) (let ((c (= y 2))) (let ((z (if c (set! x 2) (set! x 3)))) (+ x y))))) 4)
 (test-machine '(let ((x 123)) (let ((y (set! x 456))) x)) 456)
 (test-machine '(let ((x 123)) (let ((y (set! x 456))) (let ((u (set! x 789))) x))) 789)
 (test-machine '(let ((x 123)) (let ((y (set! x 456))) (let ((u (let ((z (set! x 789))) 0))) x))) 789)
@@ -167,6 +168,6 @@
 ; 'real' programs
 (test-machine (file->value "test/fac.scm") 40320)
 (test-machine (file->value "test/fib.scm") 21)
-;(test-machine (file->value "test/fib2.scm") 21)
+(test-machine (file->value "test/fib-mut.scm") 21)
                   
                                                         
