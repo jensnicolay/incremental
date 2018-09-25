@@ -39,7 +39,7 @@
 (test-machine '(let ((f (lambda (x) (let ((i (lambda (a) a))) (i x))))) (let ((z1 (f 123))) (let ((z2 (f #t))) z2))) #t)
 (test-machine '((lambda (x) (* x x)) 4) 16)
 (test-machine '(let ((f (lambda (g) (g 4)))) (f (lambda (x) (* x x)))) 16)
-(test-machine '(let ((f (lambda () (lambda (x) (* x x))))) (let ((g (f))) (g 4))))
+(test-machine '(let ((f (lambda () (lambda (x) (* x x))))) (let ((g (f))) (g 4))) 16)
 
 (test-machine '(if #t 1 2) 1)
 (test-machine '(if #f 1 2) 2)

@@ -259,8 +259,8 @@
       (printf "root of ~v ~v is ~v\n" b access b-root)
       (lookup-dynamic2 b-root s g parent))))
 
-(define (dobido e access s g parent)
-  (printf "dobido ~v ~v ~v\n" e access s)
+(define (follow-path e access s g parent)
+  (printf "follow-path ~v ~v ~v\n" e access s)
   (match e
     ((«cons» _ e-car e-cdr)
      (match access
@@ -286,7 +286,7 @@
        (lookup-root-expression b access s g parent)))
     ((«app» _ e-rator e-rands)
      (let ((s* (successor (successor s g) g)))
-       (dobido (state-e s*) access s* g parent)))
+       (follow-path (state-e s*) access s* g parent)))
     ))
 
 (define (lookup-root-expression b access s g parent)
@@ -305,14 +305,14 @@
               (lookup-root-expression-helper s*))
              ((«let» _ (== e-b) e-init _)
               (if (equal? κ κ-b)
-                  (dobido e-init access s* g parent)
+                  (follow-path e-init access s* g parent)
                   (lookup-root-expression-helper s*)))
              ((«let» _ _ _ _)
               (lookup-root-expression-helper s*))
              ((«set!» _ («id» _ x) e-update)
               (let ((b* (lookup-static x s* g parent)))
                 (if (equal? b b*)
-                    (dobido e-update access s* g parent)
+                    (follow-path e-update access s* g parent)
                     (lookup-root-expression-helper s*))))
              ((«set!» _ _ _)
               (lookup-root-expression-helper s*))
@@ -329,7 +329,7 @@
                       (if (null? xs)
                           (lookup-root-expression-helper s*)
                           (if (equal? (car xs) e-b)
-                              (dobido (car e-args) access s* g parent)
+                              (follow-path (car e-args) access s* g parent)
                               (param-loop (cdr xs) (cdr e-args))))))
                   (lookup-root-expression-helper s*)))
              ((«set-car!» _ _ _)
@@ -401,12 +401,6 @@
   (define fwd (hash))
   (define bwd (hash))
   
-  ;(define (add-transition graph from to)
-  ;  (hash-set graph from (set-add (hash-ref graph from (set)) to)))
-
-  ;(define (add-transition! from to)
-  ;  (set! graph (add-transition graph from to)))
-
   (define (add-transition! from to)
     (set! fwd (hash-set fwd from to))
     (set! bwd (hash-set bwd to from)))
