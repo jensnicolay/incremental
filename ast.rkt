@@ -1,117 +1,68 @@
 #lang racket
 (provide (all-defined-out))
 
-(struct «lit» (l v) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («lit»-l s1) («lit»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («lit»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («lit»-l s)))))
+(struct «lit» (l v) #:transparent
   #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "~a" («lit»-v v))))
-(struct «id» (l x) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                                (= («id»-l s1) («id»-l s2))))
-                                                           (define hash-proc (lambda (s rhash) («id»-l s)))
-                                                           (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («id»-l s)))))
+(struct «id» (l x) #:transparent
   #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "~a" («id»-x v))))
-(struct «quo» (l e) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («quo»-l s1) («quo»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («quo»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («quo»-l s))))))
-(struct «lam» (l x e) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («lam»-l s1) («lam»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («lam»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («lam»-l s)))))
+(struct «quo» (l e) #:transparent)
+
+(struct «lam» (l x e) #:transparent
   #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(lambda ~a ~a)" («lam»-x v) («lam»-e v))))  
-(struct «app» (l ae aes) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («app»-l s1) («app»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («app»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («app»-l s)))))
+                                 (fprintf p "(lambda ~a ~a)" («lam»-x v) («lam»-e v))))
+(struct «app» (l ae aes) #:transparent
   #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "~a" (cons («app»-ae v) («app»-aes v)))))
-(struct «let» (l x e0 e1) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («let»-l s1) («let»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («let»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («let»-l s)))))
+
+(struct «let» (l x e0 e1) #:transparent
     #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(let ((~a ~a)) ~a)" («let»-x v) («let»-e0 v) («let»-e1 v))))
 
-(struct «letrec» (l x e0 e1) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («letrec»-l s1) («letrec»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («letrec»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («letrec»-l s)))))
+(struct «letrec» (l x e0 e1) #:transparent
       #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(letrec ((~a ~a)) ~a)" («letrec»-x v) («letrec»-e0 v) («letrec»-e1 v))))
 
-(struct «if» (l ae e0 e1) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («if»-l s1) («if»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («if»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («if»-l s)))))
+(struct «if» (l ae e0 e1) #:transparent
     #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(if ~a ~a ~a)" («if»-ae v) («if»-e0 v) («if»-e1 v))))
-(struct «set!» (l x ae) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («set!»-l s1) («set!»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («set!»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («set!»-l s)))))
+
+(struct «set!» (l x ae) #:transparent
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(set! ~a ~a)" («set!»-x v) («set!»-ae v))))
 
-(struct «car» (l x) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («car»-l s1) («car»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («car»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («car»-l s)))))
+(struct «car» (l x) #:transparent
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(car ~a)" («car»-x v))))
 
-(struct «cdr» (l x) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («cdr»-l s1) («cdr»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («cdr»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («cdr»-l s)))))
+(struct «cdr» (l x) #:transparent 
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(cdr ~a)" («cdr»-x v))))
 
-(struct «set-car!» (l x ae) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («set-car!»-l s1) («set-car!»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («set-car!»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («set-car!»-l s)))))
+(struct «set-car!» (l x ae) #:transparent
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(set-car! ~a ~a)" («set-car!»-x v) («set-car!»-ae v))))
 
-(struct «set-cdr!» (l x ae) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («set-cdr!»-l s1) («set-cdr!»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («set-cdr!»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («set-cdr!»-l s)))))
+(struct «set-cdr!» (l x ae) #:transparent
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(set-cdr! ~a ~a)" («set-cdr!»-x v) («set-cdr!»-ae v))))
 
-(struct «cons» (l ae1 ae2) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («cons»-l s1) («cons»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («cons»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («cons»-l s)))))
+(struct «cons» (l ae1 ae2) #:transparent
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(cons ~a ~a)" («cons»-ae1 v) («cons»-ae2 v))))
 
-(struct «vector-ref» (l x ae) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («vector-ref»-l s1) («vector-ref»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («vector-ref»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («vector-ref»-l s)))))
+(struct «vector-ref» (l x ae) #:transparent
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(vector-ref ~a ~a)" («vector-ref»-x v) («vector-ref»-ae v))))
 
-(struct «vector-set!» (l x ae1 ae2) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («vector-set!»-l s1) («vector-set!»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («vector-set!»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («vector-set!»-l s)))))
+(struct «vector-set!» (l x ae1 ae2) #:transparent
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(vector-set! ~a ~a ~a)" («vector-set!»-x v) («vector-set!»-ae1 v) («vector-set!»-ae2 v))))
 
-(struct «make-vector» (l ae1 ae2) #:transparent #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
-                                                                   (= («make-vector»-l s1) («make-vector»-l s2))))
-                                              (define hash-proc (lambda (s rhash) («make-vector»-l s)))
-                                              (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code («make-vector»-l s)))))
+(struct «make-vector» (l ae1 ae2) #:transparent
         #:property prop:custom-write (lambda (v p w?)
                                  (fprintf p "(make-vector ~a ~a)" («make-vector»-ae1 v) («make-vector»-ae2 v))))
-
 
 
 (define (compile e)
