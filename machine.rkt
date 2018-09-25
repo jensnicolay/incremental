@@ -11,7 +11,7 @@
 
 (struct letk (x e ρ) #:transparent)
 (struct letreck (x e ρ) #:transparent)
-;(struct clo (e) #:transparent
+(struct clo (e s) #:transparent)
  ; #:property prop:custom-write (lambda (v p w?)
   ;                               (fprintf p "<clo ~v>" (clo-e v))))
 (struct prim (name proc) #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
@@ -95,9 +95,9 @@
      (let ((d (lookup-variable x s g parent)))
        ;(printf "-> ~v\n" d)
        d))
-    ((«lam» _ _ _)
+    ((«lam» _ e-params e-body)
      ;(printf "-> clo ~v\n" s)
-     s)
+     (clo e s))
     ((«let» _ _ _ e-body)
      (let graph-fw ((s* (successor s g)))
        (match s*
@@ -170,15 +170,9 @@
          (ast-helper (graph-find-bw g s pa κ)))
         ((«let» _ (and e-decl («id» _ (== x))) _ _)
          (binding x e-decl κ))
-        ((«let» _ _ _ _)
-         (ast-helper (graph-find-bw g s pa κ)))
         ((«letrec» _ (and e-decl («id» _ (== x))) _ _)
          (binding x e-decl κ))
         ((«letrec» _ _ _ _)
-         (ast-helper (graph-find-bw g s pa κ)))
-        ((«app» _ _ _)
-         (ast-helper (graph-find-bw g s pa κ)))
-        ((«if» _ _ _ _)
          (ast-helper (graph-find-bw g s pa κ)))
         ((«set!» _ _ (== e))
          (ast-helper (graph-find-bw g s pa κ)))
@@ -192,14 +186,19 @@
                     (binding x e-decl κ))
                    (_
                     (param-loop (cdr xs))))))))
-        (#f (binding x #f #f))))) ; no static decl found
+        (#f (binding x #f #f))
+        (_
+         (ast-helper (graph-find-bw g s pa κ)))
+        ))) ; no static decl found
 
   (define (find-lambda s pa) ; s should eval body expr
     ;(printf "find-lambda ~v ~v\n" s pa)
     (let ((s* (predecessor s g)))
       (match s*
         ((state («app» _ e-rator _) _)
-         (ev e-rator '() s* g parent)))))
+         (let ((clo (ev e-rator '() s* g parent)))
+           (clo-s clo))))
+      ))
 
   (let ((res (ast-helper s)))
     (printf "looked up static ~v = ~v\n" x res)
@@ -216,33 +215,19 @@
            (eval (string->symbol x) ns))
           ((state e κ)
            (match e
-             ((«lit» _ _)
-              (lookup-dynamic-helper s*))
-             ((«lam» _ _ _)
-              (lookup-dynamic-helper s*))
              ((«let» _ (== e-b) e-init _)
               (if (equal? κ κ-b)
                   (ev e-init '() s g parent)
                   (lookup-dynamic-helper s*)))
-             ((«let» _ _ _ _)
-              (lookup-dynamic-helper s*))
              ((«letrec» _ (== e-b) e-init _)
               (if (equal? κ κ-b)
                   (ev e-init '() s g parent)
                   (lookup-dynamic-helper s*)))
-             ((«letrec» _ _ _ _)
-              (lookup-dynamic-helper s*))
              ((«set!» _ («id» _ (== x)) e-update)
               (let ((b* (lookup-static x s* g parent)))
                 (if (equal? b b*)
                     (ev e-update '() s* g parent)
                     (lookup-dynamic-helper s*))))
-             ((«set!» _ _ _)
-              (lookup-dynamic-helper s*))
-             ((«id» _ _)
-              (lookup-dynamic-helper s*))
-             ((«if» _ _ _ _)
-              (lookup-dynamic-helper s*))
              ((«app» _ _ _)
               (if (and (body-expression? (state-e s) parent) ; s* is compound call, s is proc entry
                        (equal? (state-κ s) κ-b))
@@ -255,13 +240,7 @@
                               (ev (car e-args) '() s* g parent)
                               (param-loop (cdr xs) (cdr e-args))))))
                   (lookup-dynamic-helper s*)))
-             ((«set-car!» _ _ _)
-              (lookup-dynamic-helper s*))
-             ((«car» _ _)
-              (lookup-dynamic-helper s*))
-             ((«cdr» _ _)
-              (lookup-dynamic-helper s*))
-             ((«cons» _ _ _)
+             (_
               (lookup-dynamic-helper s*))
              ))
           )))
@@ -380,22 +359,6 @@
            (error "unbound root" b-root))
           ((state e κ)
            (match e
-             ((«lit» _ _)
-              (lookup-dynamic2-helper s*))
-             ((«lam» _ _ _)
-              (lookup-dynamic2-helper s*))
-             ((«let» _ _ _ _)
-              (lookup-dynamic2-helper s*))
-             ((«letrec» _ _ _ _)
-              (lookup-dynamic2-helper s*))
-             ((«set!» _ _ _)
-              (lookup-dynamic2-helper s*))
-             ((«id» _ _)
-              (lookup-dynamic2-helper s*))
-             ((«if» _ _ _ _)
-              (lookup-dynamic2-helper s*))
-             ((«app» _ _ _)
-              (lookup-dynamic2-helper s*))
              ((«set-car!» _ («id» _ x) e-update)
               (let ((b* (lookup-static x s g parent)))
                 (let ((b*-root (lookup-root-expression b* '(car) s* g parent)))
@@ -412,10 +375,6 @@
                     (if alias?
                         (ev e-update '() s* g parent)
                         (lookup-dynamic2-helper s*))))))
-             ((«car» _ _)
-              (lookup-dynamic2-helper s*))
-             ((«cdr» _ _)
-              (lookup-dynamic2-helper s*))
              ((«cons» _  (== e-b) (== e-b))
               'TODO)
              ((«cons» _  (== e-b) _)
@@ -426,7 +385,7 @@
               (if (equal? κ κ-b)
                   (ev e-b '() s* g parent)
                   (lookup-dynamic2-helper s*)))
-             ((«cons» _ _ _) ; TIODO not all cases handled!
+             (_ ; TIODO not all cases handled yet!
               (lookup-dynamic2-helper s*))
              ))
           )))
@@ -506,12 +465,8 @@
          (let* ((g (graph fwd bwd #f))
                 (d-proc (ev e-rator '() s g parent)))
            (match d-proc
-             ((state («lam» _ _ e-body) _)
+             ((clo («lam» _ _ e-body) _)
               (let* ((κ* (count!))
-                     (s* (state e-body κ*)))
-                s*))
-             ((state («set!» _ _ («lam» _ _ e-body)) _)
-              (let* ((κ* (count!)) ; CLONE (caused by atomic-only set!)
                      (s* (state e-body κ*)))
                 s*))
              ((? procedure?)
@@ -582,8 +537,10 @@
 (module+ main
  (conc-eval
   (compile
-   '(let ((o (cons 1 2))) (let ((f (lambda () o))) (let ((u (set-car! o 3))) (let ((w (f))) (car w))))))))
-
+   '(let ((f (lambda () (lambda (x) (* x x)))))
+      (let ((g (f)))
+        (g 4))))))
+               
 
 ;(conc-eval
 ; (compile
