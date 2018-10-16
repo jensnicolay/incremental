@@ -38,39 +38,6 @@
         counter
         (set! counter (add1 counter))))))
 
-
-(define (index v x)
-  (let ((i (vector-member x v)))
-    (if i
-        i
-        (let ((i (add1 (vector-ref v 0))))
-          (vector-set! v 0 i)
-          (vector-set! v i x)
-          i))))
-(define stateis (make-vector 2000))
-(define (state->statei q) (index stateis q))
-
-(define (state-repr s)
-  (format "~v ~v" (state-e s) (state-κ s)))
-
-(define (generate-dot g name)
-  (let ((dotf (open-output-file (format "~a.dot" name) #:exists 'replace)))
-  
-    (define (dot-helper s)
-      (let ((si (state->statei s)))
-        (fprintf dotf "~a [label=\"~a | ~a\"];\n" si si (state-repr s))
-        (let ((s* (successor s g)))
-          (when s*
-            (let ((si* (state->statei s*)))
-              (fprintf dotf "~a -> ~a;\n" si si*)
-              (dot-helper s*))))))
-    
-    (fprintf dotf "digraph G {\n")
-    (let ((s0 (graph-initial g)))
-      (dot-helper s0)
-      (fprintf dotf "}")
-      (close-output-port dotf))))
-
 ;;;
 
 (define (successor s g)
@@ -363,7 +330,7 @@
               (let ((b* (lookup-static x s g parent)))
                 (let ((b*-root (lookup-root-expression b* '(car) s* g parent)))
                   (let ((alias? (equal? b*-root b-root)))
-                    (printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(car) b*-root b-root alias?)
+                    ;(printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(car) b*-root b-root alias?)
                     (if alias?
                         (ev e-update '() s* g parent)
                         (lookup-dynamic2-helper s*))))))
@@ -371,7 +338,7 @@
               (let ((b* (lookup-static x s g parent)))
                 (let ((b*-root (lookup-root-expression b* '(cdr) s* g parent)))
                   (let ((alias? (equal? b*-root b-root)))
-                    (printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(cdr) b*-root b-root alias?)
+                    ;(printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(cdr) b*-root b-root alias?)
                     (if alias?
                         (ev e-update '() s* g parent)
                         (lookup-dynamic2-helper s*))))))
@@ -418,39 +385,26 @@
     ;(printf "cont e ~v κ ~v\n" e κ)
     (let ((p (parent e)))
       (match p
-        ((«let» _ _ _ (== e))
-         (cont p κ))
         ((«let» _ _ (== e) e-body)
          (state e-body κ))
-        ((«letrec» _ _ _ (== e))
-         (cont p κ))
         ((«letrec» _ _ (== e) e-body)
          (state e-body κ))
-        ((«set!» _ _ (== e))
-         (cont p κ))
-        ((«if» _ _ (== e) _)
-         (cont p κ))
-        ((«if» _ _ _ (== e))
-         (cont p κ))
         ((«lam» _ _ (== e))
          (let ((s* (stack-pop (state e κ) κ)))
            ;(printf "pop e ~v κ ~v = ~v\n" e κ κs)
            (cont (state-e s*) (state-κ s*))))
-        (#f #f))))
+        (#f #f)
+        (_ (cont p κ))
+        )))
   
   (define (step s)
     (printf "\n#~v\nstep ~v\n" (state->statei s) s)
-
-    (define (step-helper e κ)
+    (match-let (((state e κ) s))
       (match e
-        ((? ae? e)
-         (cont e κ))
         ((«let» _ _ init _)
          (state init κ))
         ((«letrec» _ _ init _)
          (state init κ))
-        ((«set!» _ («id» _ x) e-init)
-         (cont e κ)) ; only atomic update exps!
         ((«if» _ e-cond e-then e-else)
          (let* ((g (graph fwd bwd #f))
                 (d-cond (ev e-cond '() s g parent)))
@@ -465,20 +419,8 @@
                 s*))
              ((? procedure?)
               (cont e κ)))))
-        ((«cons» _ _ _)
-         (cont e κ))
-        ((«car» _ _)
-         (cont e κ))
-        ((«cdr» _ _)
-         (cont e κ))
-        ((«set-car!» _ _ _) 
-         (cont e κ))
-        ((«set-cdr!» _ _ _)
-         (cont e κ))
-        ))
-
-    (match s
-      ((state e κ) (step-helper e κ))))
+        (_ (cont e κ))
+        )))
 
   (define (explore! s)
     (let ((s* (step s)))
@@ -504,6 +446,40 @@
 
 (define (conc-eval e)
   (evaluate e))
+
+;;; OUTPUT STUFF
+
+(define (index v x)
+  (let ((i (vector-member x v)))
+    (if i
+        i
+        (let ((i (add1 (vector-ref v 0))))
+          (vector-set! v 0 i)
+          (vector-set! v i x)
+          i))))
+(define stateis (make-vector 2000))
+(define (state->statei q) (index stateis q))
+
+(define (state-repr s)
+  (format "~v ~v" (state-e s) (state-κ s)))
+
+(define (generate-dot g name)
+  (let ((dotf (open-output-file (format "~a.dot" name) #:exists 'replace)))
+  
+    (define (dot-helper s)
+      (let ((si (state->statei s)))
+        (fprintf dotf "~a [label=\"~a | ~a\"];\n" si si (state-repr s))
+        (let ((s* (successor s g)))
+          (when s*
+            (let ((si* (state->statei s*)))
+              (fprintf dotf "~a -> ~a;\n" si si*)
+              (dot-helper s*))))))
+    
+    (fprintf dotf "digraph G {\n")
+    (let ((s0 (graph-initial g)))
+      (dot-helper s0)
+      (fprintf dotf "}")
+      (close-output-port dotf))))
 
 ;;; TESTS
 
