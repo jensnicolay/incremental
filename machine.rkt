@@ -4,7 +4,6 @@
 (require "ast.rkt")
 
 (provide conc-eval)
-
 (define ns (make-base-namespace))
 
 ;;;;;;;;;;
@@ -20,10 +19,6 @@
                                                    (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (prim-name s))))))
 (struct addr (a) #:transparent)
 (struct binding (x e κ) #:transparent)
-;(struct ctx (e d-proc n) #:transparent ; (e-app d-proc n)
-; #:property prop:custom-write (lambda (v p w?)
-;                                 (fprintf p "<ctx ~v ~v>" (ctx-e v) (ctx-n v))))
-
 (struct state (e κ) #:transparent)
 (struct system (graph end-state parent) #:transparent)
 (struct graph (fwd bwd initial) #:transparent
@@ -55,15 +50,12 @@
 (define (ev e access s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
   (printf "ev ~v ~v in ~v\n" e access s)
   (match e
-    ((«lit» _ d)
-     ;(printf "-> ~v\n" ((lattice-α lat) d))
+    ((«lit» _ d) ;(printf "-> ~v\n" ((lattice-α lat) d))
      d)
     ((«id» _ x)
-     (let ((d (lookup-variable x s g parent)))
-       ;(printf "-> ~v\n" d)
+     (let ((d (lookup-variable x s g parent))) ;(printf "-> ~v\n" d)
        d))
-    ((«lam» _ e-params e-body)
-     ;(printf "-> clo ~v\n" s)
+    ((«lam» _ e-params e-body) ;(printf "-> clo ~v\n" s)
      (clo e s))
     ((«let» _ _ _ e-body)
      (let graph-fw ((s* (successor s g)))
@@ -117,9 +109,6 @@
        s*)
       (_
        (graph-fw (dir s* g))))))
-
-(define (graph-find-fw g s e κ)
-  (graph-find g s successor e κ))
 
 (define (graph-find-bw g s e κ)
   (graph-find g s predecessor e κ))
@@ -223,7 +212,7 @@
   (printf "lookup-path ~v ~v ~v\n" x access s)
   (let ((b (lookup-static x s g parent)))
     (let ((b-root (lookup-root-expression b access s g parent)))
-      (printf "root of ~v ~v is ~v\n" b access b-root)
+      ;(printf "root of ~v ~v is ~v\n" b access b-root)
       (lookup-dynamic2 b-root s g parent))))
 
 (define (follow-path e access s g parent)
@@ -266,27 +255,15 @@
           (#f (error "no root expression found"))
           ((state e κ)
            (match e
-             ((«lit» _ _)
-              (lookup-root-expression-helper s*))
-             ((«lam» _ _ _)
-              (lookup-root-expression-helper s*))
              ((«let» _ (== e-b) e-init _)
               (if (equal? κ κ-b)
                   (follow-path e-init access s* g parent)
                   (lookup-root-expression-helper s*)))
-             ((«let» _ _ _ _)
-              (lookup-root-expression-helper s*))
              ((«set!» _ («id» _ x) e-update)
               (let ((b* (lookup-static x s* g parent)))
                 (if (equal? b b*)
                     (follow-path e-update access s* g parent)
                     (lookup-root-expression-helper s*))))
-             ((«set!» _ _ _)
-              (lookup-root-expression-helper s*))
-             ((«id» _ _)
-              (lookup-root-expression-helper s*))
-             ((«if» _ _ _ _)
-              (lookup-root-expression-helper s*))
              ((«app» _ _ _)
               (if (and (body-expression? (state-e s) parent) ; s* is compound call, s is proc entry
                        (equal? (state-κ s) κ-b))
@@ -299,15 +276,7 @@
                               (follow-path (car e-args) access s* g parent)
                               (param-loop (cdr xs) (cdr e-args))))))
                   (lookup-root-expression-helper s*)))
-             ((«set-car!» _ _ _)
-              (lookup-root-expression-helper s*))
-             ((«set-cdr!» _ _ _)
-              (lookup-root-expression-helper s*))
-             ((«car» _ _)
-              (lookup-root-expression-helper s*))
-             ((«cdr» _ _)
-              (lookup-root-expression-helper s*))
-             ((«cons» _ _ _)
+             (_
               (lookup-root-expression-helper s*))
              ))
           )))
