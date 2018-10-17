@@ -88,11 +88,11 @@
               (apply proc d-rands)))))))
     ((«car» _ (and e-id («id» _ x)))
      (let ((d (lookup-path x (cons 'car field-path) s g parent)))
-       (printf "-> ~v\n" d)
+       ;(printf "-> ~v\n" d)
        d))
     ((«cdr» _ (and e-id («id» _ x)))
      (let ((d (lookup-path x (cons 'cdr field-path) s g parent)))
-       (printf "-> ~v\n" d)
+       ;(printf "-> ~v\n" d)
        d))
     ((«cons» _ ar dr)
          (match field-path
@@ -101,17 +101,14 @@
            ((cons 'cdr field-path*) (ev dr field-path* s g parent))))
     ))
 
-(define (graph-find g s dir e κ)
-  (let graph-fw ((s* (dir s g)))
+(define (graph-find-bw g s e κ)
+  (let graph-fw ((s* (predecessor s g)))
     (match s*
       (#f #f)
       ((state (== e) (== κ))
        s*)
       (_
-       (graph-fw (dir s* g))))))
-
-(define (graph-find-bw g s e κ)
-  (graph-find g s predecessor e κ))
+       (graph-fw (predecessor s* g))))))
 
 (define (lookup-static x s g parent)
   (printf "lookup-static ~v ~v\n" x s)
