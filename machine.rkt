@@ -47,59 +47,65 @@
 (define (body-expression? e parent)
   («lam»? (parent e)))
 
-(define (ev e field-path s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
-  (printf "ev ~v ~v in ~v\n" e field-path s)
-  (match e
+
+(define (ev e s g parent)
+
+  (define (eval-path e field-path s) ; general TODO: every fw movement should be restrained to previous path(s)
+    (printf "ev ~v ~v in ~v\n" e field-path s)
+    (match e
     ((«lit» _ d) ;(printf "-> ~v\n" ((lattice-α lat) d))
      d)
-    ((«id» _ x)
-     (let ((d (lookup-variable x s g parent))) ;(printf "-> ~v\n" d)
-       d))
-    ((«lam» _ e-params e-body) ;(printf "-> clo ~v\n" s)
-     (clo e s))
-    ((«let» _ _ _ e-body)
-     (let graph-fw ((s* (successor s g)))
-       (match s*
-         ((state (== e-body) (== (state-κ s)))
-          (ev e-body '() s* g parent))
-         (_
-          (graph-fw (successor s* g))))))
-    ((«if» _ _ _ _)
-     (let ((s* (successor s g)))
-       (ev (state-e s*) '() s* g parent)))
-    ((«set!» _ _ _)
-     '<undefined>)
-    ((«app» _ («id» _ x) e-rands) ;TODO: ((lam ...) rands)
-     (let ((κ (state-κ s)))
-       (let ((s* (successor s g)))
+      ((«id» _ x)
+       (let ((d (lookup-variable x s g parent))) ;(printf "-> ~v\n" d)
+         d))
+      ((«lam» _ e-params e-body) ;(printf "-> clo ~v\n" s)
+       (clo e s))
+      ((«let» _ _ _ e-body)
+       (let graph-fw ((s* (successor s g)))
          (match s*
-           (#f
-            (let ((d-rands (map (lambda (e-rand) (ev e-rand '() s g parent)) e-rands))
-                  (proc (eval (string->symbol x) ns)))
-              ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
-              (apply proc d-rands)))
-           ((state (? (lambda (e) (body-expression? e parent)) e-body) _)
-            ;(printf "\t~v: compound app with body ~v\n" e e-body)
-            (ev e-body '() s* g parent))
+           ((state (== e-body) (== (state-κ s)))
+            (eval-path e-body '() s*))
            (_
-            (let ((d-rands (map (lambda (e-rand) (ev e-rand '() s g parent)) e-rands))
-                  (proc (eval (string->symbol x) ns)))
-              ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
-              (apply proc d-rands)))))))
-    ((«car» _ (and e-id («id» _ x)))
-     (let ((d (lookup-path x (cons 'car field-path) s g parent)))
-       ;(printf "-> ~v\n" d)
-       d))
-    ((«cdr» _ (and e-id («id» _ x)))
-     (let ((d (lookup-path x (cons 'cdr field-path) s g parent)))
-       ;(printf "-> ~v\n" d)
-       d))
-    ((«cons» _ ar dr)
-         (match field-path
-           ('() s)
-           ((cons 'car field-path*) (ev ar field-path* s g parent))
-           ((cons 'cdr field-path*) (ev dr field-path* s g parent))))
-    ))
+            (graph-fw (successor s* g))))))
+      ((«if» _ _ _ _)
+       (let ((s* (successor s g)))
+         (eval-path (state-e s*) '() s*)))
+      ((«set!» _ _ _)
+       '<undefined>)
+      ((«app» _ («id» _ x) e-rands) ;TODO: ((lam ...) rands)
+       (let ((κ (state-κ s)))
+         (let ((s* (successor s g)))
+           (match s*
+             (#f
+              (let ((d-rands (map (lambda (e-rand) (eval-path e-rand '() s)) e-rands))
+                    (proc (eval (string->symbol x) ns)))
+                ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
+                (apply proc d-rands)))
+             ((state (? (lambda (e) (body-expression? e parent)) e-body) _)
+              ;(printf "\t~v: compound app with body ~v\n" e e-body)
+              (eval-path e-body '() s*))
+             (_
+              (let ((d-rands (map (lambda (e-rand) (eval-path e-rand '() s)) e-rands))
+                    (proc (eval (string->symbol x) ns)))
+                ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
+                (apply proc d-rands)))))))
+      ((«car» _ (and e-id («id» _ x)))
+       (let ((d (lookup-path x (cons 'car field-path) s g parent)))
+         ;(printf "-> ~v\n" d)
+         d))
+      ((«cdr» _ (and e-id («id» _ x)))
+       (let ((d (lookup-path x (cons 'cdr field-path) s g parent)))
+         ;(printf "-> ~v\n" d)
+         d))
+      ((«cons» _ ar dr)
+       (match field-path
+         ('() s)
+         ((cons 'car field-path*) (eval-path ar field-path* s))
+         ((cons 'cdr field-path*) (eval-path dr field-path* s))))
+      ))
+  
+  (eval-path e '() s))
+
 
 (define (graph-find-bw g s e κ)
   (let graph-fw ((s* (predecessor s g)))
@@ -109,6 +115,11 @@
        s*)
       (_
        (graph-fw (predecessor s* g))))))
+
+(define (lookup-variable x s g parent)
+  (printf "lookup-variable ~v ~v\n" x s)
+  (let ((b (lookup-static x s g parent)))
+    (lookup-var-dynamic b s g parent)))
 
 (define (lookup-static x s g parent)
   (printf "lookup-static ~v ~v\n" x s)
@@ -149,7 +160,7 @@
     (let ((s* (predecessor s g)))
       (match s*
         ((state («app» _ e-rator _) _)
-         (let ((clo (ev e-rator '() s* g parent)))
+         (let ((clo (ev e-rator s* g parent)))
            (clo-s clo))))
       ))
 
@@ -157,7 +168,7 @@
     (printf "looked up static ~v = ~v\n" x res)
     res))
 
-(define (lookup-dynamic b s g parent)
+(define (lookup-var-dynamic b s g parent)
   (printf "lookup-dynamic ~v ~v\n" b s)
   (match-let (((binding x e-b κ-b) b))
 
@@ -170,16 +181,16 @@
            (match e
              ((«let» _ (== e-b) e-init _)
               (if (equal? κ κ-b)
-                  (ev e-init '() s g parent)
+                  (ev e-init s g parent)
                   (lookup-dynamic-helper s*)))
              ((«letrec» _ (== e-b) e-init _)
               (if (equal? κ κ-b)
-                  (ev e-init '() s g parent)
+                  (ev e-init s g parent)
                   (lookup-dynamic-helper s*)))
              ((«set!» _ («id» _ (== x)) e-update)
               (let ((b* (lookup-static x s* g parent)))
                 (if (equal? b b*)
-                    (ev e-update '() s* g parent)
+                    (ev e-update s* g parent)
                     (lookup-dynamic-helper s*))))
              ((«app» _ _ _)
               (if (and (body-expression? (state-e s) parent) ; s* is compound call, s is proc entry
@@ -190,7 +201,7 @@
                       (if (null? xs)
                           (lookup-dynamic-helper s*)
                           (if (equal? (car xs) e-b)
-                              (ev (car e-args) '() s* g parent)
+                              (ev (car e-args) s* g parent)
                               (param-loop (cdr xs) (cdr e-args))))))
                   (lookup-dynamic-helper s*)))
              (_
@@ -200,17 +211,14 @@
 
     (lookup-dynamic-helper s)))
 
-(define (lookup-variable x s g parent)
-  (printf "lookup-variable ~v ~v\n" x s)
-  (let ((b (lookup-static x s g parent)))
-    (lookup-dynamic b s g parent)))
 
 (define (lookup-path x field-path s g parent)
   (printf "lookup-path ~v ~v ~v\n" x field-path s)
   (let ((b (lookup-static x s g parent)))
     (let ((b-root (lookup-root-expression b field-path s g parent)))
       ;(printf "root of ~v ~v is ~v\n" b field-path b-root)
-      (lookup-dynamic2 b-root s g parent))))
+      (lookup-path-dynamic b-root s g parent))))
+
 
 (define (follow-field-path e field-path s g parent)
   (printf "follow-path ~v ~v ~v\n" e field-path s)
@@ -280,8 +288,7 @@
 
     (lookup-root-expression-helper s)))
 
-
-(define (lookup-dynamic2 b-root s g parent)
+(define (lookup-path-dynamic b-root s g parent)
   (printf "lookup-dynamic2 ~v ~v\n" b-root s)
   (match-let (((cons e-b κ-b) b-root))
 
@@ -298,7 +305,7 @@
                   (let ((alias? (equal? b*-root b-root)))
                     ;(printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(car) b*-root b-root alias?)
                     (if alias?
-                        (ev e-update '() s* g parent)
+                        (ev e-update s* g parent)
                         (lookup-dynamic2-helper s*))))))
              ((«set-cdr!» _ («id» _ x) e-update)
               (let ((b* (lookup-static x s g parent)))
@@ -306,17 +313,17 @@
                   (let ((alias? (equal? b*-root b-root)))
                     ;(printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(cdr) b*-root b-root alias?)
                     (if alias?
-                        (ev e-update '() s* g parent)
+                        (ev e-update s* g parent)
                         (lookup-dynamic2-helper s*))))))
              ((«cons» _  (== e-b) (== e-b))
               'TODO)
              ((«cons» _  (== e-b) _)
               (if (equal? κ κ-b)
-                  (ev e-b '() s* g parent)
+                  (ev e-b s* g parent)
                   (lookup-dynamic2-helper s*)))
              ((«cons» _  _ (== e-b))
               (if (equal? κ κ-b)
-                  (ev e-b '() s* g parent)
+                  (ev e-b s* g parent)
                   (lookup-dynamic2-helper s*)))
              (_ ; TIODO not all cases handled yet!
               (lookup-dynamic2-helper s*))
@@ -324,7 +331,6 @@
           )))
 
     (lookup-dynamic2-helper s)))
-
 
 (define (explore e)
 
@@ -373,11 +379,11 @@
          (state init κ))
         ((«if» _ e-cond e-then e-else)
          (let* ((g (graph fwd bwd #f))
-                (d-cond (ev e-cond '() s g parent)))
+                (d-cond (ev e-cond s g parent)))
            (state (if d-cond e-then e-else) κ)))
         ((«app» _ e-rator e-rands)
          (let* ((g (graph fwd bwd #f))
-                (d-proc (ev e-rator '() s g parent)))
+                (d-proc (ev e-rator s g parent)))
            (match d-proc
              ((clo («lam» _ _ e-body) _)
               (let* ((κ* (count!))
@@ -407,8 +413,8 @@
          (s-end (system-end-state sys))
          (parent (system-parent sys)))
     (printf "\n\nEXPLORED with end state ~v\n" (state->statei s-end))
-    (generate-dot g "grapho")
-    (ev (state-e s-end) '() s-end g parent)))
+    ;(generate-dot g "grapho")
+    (ev (state-e s-end) s-end g parent)))
 
 (define (conc-eval e)
   (evaluate e))
