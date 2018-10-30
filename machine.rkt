@@ -53,8 +53,8 @@
   (define (eval-path e field-path s) ; general TODO: every fw movement should be restrained to previous path(s)
     (printf "ev ~v ~v in ~v\n" e field-path s)
     (match e
-    ((«lit» _ d) ;(printf "-> ~v\n" ((lattice-α lat) d))
-     d)
+      ((«lit» _ d) ;(printf "-> ~v\n" ((lattice-α lat) d))
+       d)
       ((«id» _ x)
        (let ((d (lookup-variable x s g parent))) ;(printf "-> ~v\n" d)
          d))
@@ -160,8 +160,8 @@
     (let ((s* (predecessor s g)))
       (match s*
         ((state («app» _ e-rator _) _)
-         (let ((clo (ev e-rator s* g parent)))
-           (clo-s clo))))
+         (let ((d-clo (ev e-rator s* g parent)))
+           (clo-s d-clo))))
       ))
 
   (let ((res (ast-helper s)))
@@ -332,30 +332,39 @@
 
     (lookup-dynamic2-helper s)))
 
-(define (stack-pop s κ g parent)
-  (match s
-    ((state (? (lambda (e) (body-expression? e parent))) (== κ))
-     (predecessor s g))
-    (_
-     (let ((s* (predecessor s g)))
-       (stack-pop s* κ)))))
+;(define (stack-pop s g parent)
+;  (let ((κ (state-κ s)))
+;
+;    (define (stack-pop-helper s)
+;      (match s
+;        ((state (? (lambda (e) (body-expression? e parent))) (== κ))
+;         (predecessor s g))
+;        (_
+;         (let ((s* (predecessor s g)))
+;           (stack-pop-helper s*)))))
+;
+;    (stack-pop-helper s)))
                
       
-(define (cont e κ g parent)
+(define (cont s g parent)
   ;(printf "cont e ~v κ ~v\n" e κ)
-  (let ((p (parent e)))
-    (match p
-      ((«let» _ _ (== e) e-body)
-       (state e-body κ))
-      ((«letrec» _ _ (== e) e-body)
-       (state e-body κ))
-      ((«lam» _ _ (== e))
-       (let ((s* (stack-pop (state e κ) κ g parent)))
-         ;(printf "pop e ~v κ ~v = ~v\n" e κ κs)
-         (cont (state-e s*) (state-κ s*) g parent)))
-      (#f #f)
-      (_ (cont p κ g parent))
-      )))
+
+  (define (cont-helper e κ)
+    (let ((p (parent e)))
+      (match p
+        ((«let» _ _ (== e) e-body)
+         (state e-body κ))
+        ((«letrec» _ _ (== e) e-body)
+         (state e-body κ))
+        ((«lam» _ _ (== e))
+         (let ((s* (predecessor (state e κ) g)))
+           ;(printf "pop e ~v κ ~v = ~v\n" e κ κs)
+           (cont s* g parent)))
+        (#f #f)
+        (_ (cont-helper p κ))
+        )))
+
+  (cont-helper (state-e s) (state-κ s)))
   
 (define (step s g parent)
   (printf "\n#~v\nstep ~v\n" (state->statei s) s)
@@ -376,8 +385,8 @@
                    (s* (state e-body κ*)))
               s*))
            ((? procedure?)
-            (cont e κ g parent)))))
-      (_ (cont e κ g parent))
+            (cont s g parent)))))
+      (_ (cont s g parent))
       )))
 
 
