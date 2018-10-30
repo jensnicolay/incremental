@@ -332,70 +332,66 @@
 
     (lookup-dynamic2-helper s)))
 
+(define (stack-pop s κ g parent)
+  (match s
+    ((state (? (lambda (e) (body-expression? e parent))) (== κ))
+     (predecessor s g))
+    (_
+     (let ((s* (predecessor s g)))
+       (stack-pop s* κ)))))
+               
+      
+(define (cont e κ g parent)
+  ;(printf "cont e ~v κ ~v\n" e κ)
+  (let ((p (parent e)))
+    (match p
+      ((«let» _ _ (== e) e-body)
+       (state e-body κ))
+      ((«letrec» _ _ (== e) e-body)
+       (state e-body κ))
+      ((«lam» _ _ (== e))
+       (let ((s* (stack-pop (state e κ) κ g parent)))
+         ;(printf "pop e ~v κ ~v = ~v\n" e κ κs)
+         (cont (state-e s*) (state-κ s*) g parent)))
+      (#f #f)
+      (_ (cont p κ g parent))
+      )))
+  
+(define (step s g parent)
+  (printf "\n#~v\nstep ~v\n" (state->statei s) s)
+  (match-let (((state e κ) s))
+    (match e
+      ((«let» _ _ init _)
+       (state init κ))
+      ((«letrec» _ _ init _)
+       (state init κ))
+      ((«if» _ e-cond e-then e-else)
+       (let ((d-cond (ev e-cond s g parent)))
+         (state (if d-cond e-then e-else) κ)))
+      ((«app» _ e-rator e-rands)
+       (let ((d-proc (ev e-rator s g parent)))
+         (match d-proc
+           ((clo («lam» _ _ e-body) _)
+            (let* ((κ* (count!))
+                   (s* (state e-body κ*)))
+              s*))
+           ((? procedure?)
+            (cont e κ g parent)))))
+      (_ (cont e κ g parent))
+      )))
+
+
 (define (explore e)
 
   (define parent (make-parent e))
   
-  ; state -> (set state...)
-  (define fwd (hash))
-  (define bwd (hash))
+  (define g (graph (hash) (hash) #f))
   
   (define (add-transition! from to)
-    (set! fwd (hash-set fwd from to))
-    (set! bwd (hash-set bwd to from)))
-     
-  (define (stack-pop s κ)
-    (match s
-      ((state (? (lambda (e) (body-expression? e parent))) (== κ))
-       (hash-ref bwd s))
-      (_
-       (let ((s* (hash-ref bwd s)))
-         (stack-pop s* κ)))))
-               
-      
-  (define (cont e κ)
-    ;(printf "cont e ~v κ ~v\n" e κ)
-    (let ((p (parent e)))
-      (match p
-        ((«let» _ _ (== e) e-body)
-         (state e-body κ))
-        ((«letrec» _ _ (== e) e-body)
-         (state e-body κ))
-        ((«lam» _ _ (== e))
-         (let ((s* (stack-pop (state e κ) κ)))
-           ;(printf "pop e ~v κ ~v = ~v\n" e κ κs)
-           (cont (state-e s*) (state-κ s*))))
-        (#f #f)
-        (_ (cont p κ))
-        )))
+    (set! g (graph (hash-set (graph-fwd g) from to) (hash-set (graph-bwd g) to from) #f)))
   
-  (define (step s)
-    (printf "\n#~v\nstep ~v\n" (state->statei s) s)
-    (match-let (((state e κ) s))
-      (match e
-        ((«let» _ _ init _)
-         (state init κ))
-        ((«letrec» _ _ init _)
-         (state init κ))
-        ((«if» _ e-cond e-then e-else)
-         (let* ((g (graph fwd bwd #f))
-                (d-cond (ev e-cond s g parent)))
-           (state (if d-cond e-then e-else) κ)))
-        ((«app» _ e-rator e-rands)
-         (let* ((g (graph fwd bwd #f))
-                (d-proc (ev e-rator s g parent)))
-           (match d-proc
-             ((clo («lam» _ _ e-body) _)
-              (let* ((κ* (count!))
-                     (s* (state e-body κ*)))
-                s*))
-             ((? procedure?)
-              (cont e κ)))))
-        (_ (cont e κ))
-        )))
-
   (define (explore! s)
-    (let ((s* (step s)))
+    (let ((s* (step s g parent)))
       (if s*
           (begin
             ;(printf "TRANS ~v -> ~v\n" (state->statei s) (set-map succs state->statei))
@@ -405,7 +401,7 @@
 
   (let ((s0 (state e (count!))))
     (let ((s-end (explore! s0)))
-      (system (graph fwd bwd s0) s-end parent)))) ;incremental-update)))
+      (system (graph (graph-fwd g) (graph-bwd g) s0) s-end parent)))) ;incremental-update)))
 
 (define (evaluate e)
   (let* ((sys (explore e))
