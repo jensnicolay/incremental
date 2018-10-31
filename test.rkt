@@ -50,6 +50,10 @@
 (test-machine '(if #f (let ((x 1)) x) (let ((x 2)) x)) 2)
 (test-machine '(let ((x (if #t 1 2))) x) 1)
 (test-machine '(let ((x (if #f 1 2))) x) 2)
+(test-machine '(let ((x (if #t (cons 1 2) (cons 3 4)))) (car x)) 1)
+(test-machine '(let ((x (if #t (cons 1 2) (cons 3 4)))) (cdr x)) 2)
+(test-machine '(let ((x (if #f (cons 1 2) (cons 3 4)))) (car x)) 3)
+(test-machine '(let ((x (if #f (cons 1 2) (cons 3 4)))) (cdr x)) 4)
 
 (test-machine '(let ((f (lambda (x) (lambda (y) x)))) (let ((v (f 123))) (v 999))) 123)
 (test-machine '(let ((f (lambda (x) (lambda (x) x)))) (let ((v (f 123))) (v 999))) 999)

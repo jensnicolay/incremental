@@ -85,6 +85,7 @@
                     (proc (eval (string->symbol x) ns)))
                 ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
                 (apply proc d-rands)))))))
+
       ((«car» _ (and e-id («id» _ x)))
        (let ((d (lookup-path x (cons 'car field-path) s g parent)))
          ;(printf "-> ~v\n" d)
@@ -102,16 +103,6 @@
   
   (eval-path e '() s))
 
-
-(define (graph-find-bw g s e κ)
-  (let graph-fw ((s* (predecessor s g)))
-    (match s*
-      (#f #f)
-      ((state (== e) (== κ))
-       s*)
-      (_
-       (graph-fw (predecessor s* g))))))
-
 (define (lookup-variable x s g parent)
   (printf "lookup-variable ~v ~v\n" x s)
   (let ((b (lookup-static x s g parent)))
@@ -127,15 +118,15 @@
       ;(printf "ast-helper ~v e ~v pa ~v\n" x e pa)
       (match pa
         ((«let» _ _ (== e) _)
-         (ast-helper (graph-find-bw g s pa κ)))
+         (ast-helper (state pa κ)))
         ((«let» _ (and e-decl («id» _ (== x))) _ _)
          (binding x e-decl κ))
         ((«letrec» _ (and e-decl («id» _ (== x))) _ _)
          (binding x e-decl κ))
         ((«letrec» _ _ _ _)
-         (ast-helper (graph-find-bw g s pa κ)))
+         (ast-helper (state pa κ)))
         ((«set!» _ _ (== e))
-         (ast-helper (graph-find-bw g s pa κ)))
+         (ast-helper (state pa κ)))
         ((«lam» _ (list xs ...) _) ; s evals body exp
          (let param-loop ((xs xs))
            (if (null? xs)
@@ -148,7 +139,7 @@
                     (param-loop (cdr xs))))))))
         (#f (binding x #f #f))
         (_
-         (ast-helper (graph-find-bw g s pa κ)))
+         (ast-helper (state pa κ)))
         ))) ; no static decl found
 
   (define (find-lambda s pa) ; s should eval body expr
@@ -219,6 +210,9 @@
 (define (follow-field-path e field-path s g parent)
   (printf "follow-path ~v ~v ~v\n" e field-path s)
   (match e
+    ((«if» _ _ _ _)
+     (let ((s* (successor s g)))
+       (follow-field-path (state-e s*) field-path s* g parent)))
     ((«cons» _ e-car e-cdr)
      (match field-path
        ((cons 'car field-path*)
@@ -445,10 +439,10 @@
 
 (module+ main
  (conc-eval
-  (compile '(let ((x (if #t
+  (compile '(let ((x (if #f
                          (cons 1 2)
                          (cons 3 4))))
-              (car x)))))
+              (cdr x)))))
 
 ;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
 ;;;; THEREFORE: we only allow aes as update exps
