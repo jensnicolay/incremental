@@ -332,20 +332,6 @@
 
     (lookup-dynamic2-helper s)))
 
-;(define (stack-pop s g parent)
-;  (let ((κ (state-κ s)))
-;
-;    (define (stack-pop-helper s)
-;      (match s
-;        ((state (? (lambda (e) (body-expression? e parent))) (== κ))
-;         (predecessor s g))
-;        (_
-;         (let ((s* (predecessor s g)))
-;           (stack-pop-helper s*)))))
-;
-;    (stack-pop-helper s)))
-               
-      
 (define (cont s g parent)
   ;(printf "cont e ~v κ ~v\n" e κ)
 
@@ -366,14 +352,15 @@
 
   (cont-helper (state-e s) (state-κ s)))
   
-(define (step s g parent)
-  (printf "\n#~v\nstep ~v\n" (state->statei s) s)
-  (match-let (((state e κ) s))
-    (match e
-      ((«let» _ _ init _)
-       (state init κ))
-      ((«letrec» _ _ init _)
-       (state init κ))
+  
+  (define (step s g parent)
+    (printf "\n#~v\nstep ~v\n" (state->statei s) s)
+    (match-let (((state e κ) s))
+      (match e
+        ((«let» _ _ init _)
+         (state init κ))
+        ((«letrec» _ _ init _)
+         (state init κ))
       ((«if» _ e-cond e-then e-else)
        (let ((d-cond (ev e-cond s g parent)))
          (state (if d-cond e-then e-else) κ)))
