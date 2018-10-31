@@ -61,12 +61,8 @@
       ((«lam» _ e-params e-body) ;(printf "-> clo ~v\n" s)
        (clo e s))
       ((«let» _ _ _ e-body)
-       (let graph-fw ((s* (successor s g)))
-         (match s*
-           ((state (== e-body) (== (state-κ s)))
-            (eval-path e-body '() s*))
-           (_
-            (graph-fw (successor s* g))))))
+       (let ((s* (state e-body (state-κ s))))
+         (eval-path e-body '() s*)))
       ((«if» _ _ _ _)
        (let ((s* (successor s g)))
          (eval-path (state-e s*) '() s*)))
@@ -449,11 +445,10 @@
 
 (module+ main
  (conc-eval
-  (compile '(let ((x 1))
-             (let ((y (+ x 1)))
-               (let ((c (= y 2)))
-                 (let ((z (if c (set! x 2) (set! x 3))))
-                   (+ x y))))))))
+  (compile '(let ((x (if #t
+                         (cons 1 2)
+                         (cons 3 4))))
+              (car x)))))
 
 ;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
 ;;;; THEREFORE: we only allow aes as update exps
