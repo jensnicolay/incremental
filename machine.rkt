@@ -97,8 +97,8 @@
     ((«cons» _ e-car e-cdr)
      (match field-path
        ('() s)
-       ((cons 'car field-path*) (graph-eval-path e-car field-path* s))
-       ((cons 'cdr field-path*) (graph-eval-path e-cdr field-path* s))))
+       ((cons 'car field-path*) (graph-eval-path e-car field-path* s g parent))
+       ((cons 'cdr field-path*) (graph-eval-path e-cdr field-path* s g parent))))
     ))
 
 (define (lookup-variable x s g parent)
