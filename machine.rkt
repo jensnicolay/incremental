@@ -66,7 +66,7 @@
        (graph-eval-path e-body field-path s* g parent)))
     ((«if» _ _ _ _)
      (let ((s* (successor s g)))
-       (graph-eval-path (state-e s*) '() s* g parent)))
+       (graph-eval-path (state-e s*) field-path s* g parent)))
     ((«set!» _ _ _)
      '<undefined>)
     ((«app» _ («id» _ x) e-rands) ;TODO: ((lam ...) rands)
