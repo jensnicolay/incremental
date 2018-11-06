@@ -212,8 +212,17 @@
   (if (null? field-path)
       (cons e (state-κ s))
       (match e
+        ((«id» _ x)
+         (let ((b (lookup-static x s g parent)))
+           (lookup-root-expression b field-path s g parent)))
+        ((«let» _ _ _ e-body)
+         (let ((s* (state e-body (state-κ s))))
+           (follow-field-path e-body field-path s* g parent)))
         ((«if» _ _ _ _)
          (let ((s* (successor s g)))
+           (follow-field-path (state-e s*) field-path s* g parent)))
+        ((«app» _ e-rator e-rands)
+         (let ((s* (successor (successor s g) g)))
            (follow-field-path (state-e s*) field-path s* g parent)))
         ((«cons» _ e-car e-cdr)
          (match field-path
@@ -226,12 +235,6 @@
          (follow-field-path e-car (cons 'car field-path) s g parent))
         ((«cdr» _ e-cdr)
          (follow-field-path e-cdr (cons 'cdr field-path) s g parent))
-        ((«id» _ x)
-         (let ((b (lookup-static x s g parent)))
-           (lookup-root-expression b field-path s g parent)))
-        ((«app» _ e-rator e-rands)
-         (let ((s* (successor (successor s g) g)))
-           (follow-field-path (state-e s*) field-path s* g parent)))
         )))
 
 (define (lookup-root-expression b field-path s g parent)
@@ -433,9 +436,14 @@
 
 (module+ main
  (conc-eval
-  (compile '(let ((f (lambda (x) (cons 1 x))))
-              (let ((p (cons 1 2)))
-                (cdr p))))))
+  (compile '(let ((p (let ((pp (cons 1 2)))
+                       (cons 3 pp))))
+              (let ((c (cdr p)))
+                (cdr c))))))
+                      
+                
+
+               
 
 ;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
 ;;;; THEREFORE: we only allow aes as update exps
