@@ -123,8 +123,8 @@
          (binding x e-decl κ))
         ((«letrec» _ (and e-decl («id» _ (== x))) _ _)
          (binding x e-decl κ))
-        ((«letrec» _ _ _ _)
-         (ast-helper (state pa κ)))
+        ;((«letrec» _ _ _ _)
+        ; (ast-helper (state pa κ)))
         ((«set!» _ _ (== e))
          (ast-helper (state pa κ)))
         ((«lam» _ (list xs ...) _) ; s evals body exp
@@ -209,36 +209,30 @@
 
 (define (follow-field-path e field-path s g parent)
   (printf "follow-path ~v ~v ~v\n" e field-path s)
-  (match e
-    ((«if» _ _ _ _)
-     (let ((s* (successor s g)))
-       (follow-field-path (state-e s*) field-path s* g parent)))
-    ((«cons» _ e-car e-cdr)
-     (match field-path
-       ((cons 'car field-path*)
-        (if («id»? e-car)
-            (let ((b (lookup-static («id»-x e-car) s g parent)))
-              (lookup-root-expression b field-path* s g parent))
-            (cons e-car (state-κ s))))
-       ((cons 'cdr field-path*)
-        (if («id»? e-cdr)
-            (let ((b (lookup-static («id»-x e-cdr) s g parent)))
-              (lookup-root-expression b field-path* s g parent))
-            (cons e-cdr (state-κ s))))
-       ))
-    ((«car» _ («id» _ x-car))
-     (let ((b (lookup-static x-car s g parent)))
-       (lookup-root-expression b (cons 'car field-path) s g parent)))
-    ((«cdr» _ («id» _ x-cdr))
-     (let ((b (lookup-static x-cdr s g parent)))
-       (lookup-root-expression b (cons 'cdr field-path) s g parent)))
-    ((«id» _ x)
-     (let ((b (lookup-static x s g parent)))
-       (lookup-root-expression b field-path s g parent)))
-    ((«app» _ e-rator e-rands)
-     (let ((s* (successor (successor s g) g)))
-       (follow-field-path (state-e s*) field-path s* g parent)))
-    ))
+  (if (null? field-path)
+      (cons e (state-κ s))
+      (match e
+        ((«if» _ _ _ _)
+         (let ((s* (successor s g)))
+           (follow-field-path (state-e s*) field-path s* g parent)))
+        ((«cons» _ e-car e-cdr)
+         (match field-path
+           ((cons 'car field-path*)
+            (follow-field-path e-car field-path* s g parent))
+           ((cons 'cdr field-path*)
+            (follow-field-path e-cdr field-path* s g parent))
+           ))
+        ((«car» _ e-car) ; e-car can only be «id»...
+         (follow-field-path e-car (cons 'car field-path) s g parent))
+        ((«cdr» _ e-cdr)
+         (follow-field-path e-cdr (cons 'cdr field-path) s g parent))
+        ((«id» _ x)
+         (let ((b (lookup-static x s g parent)))
+           (lookup-root-expression b field-path s g parent)))
+        ((«app» _ e-rator e-rands)
+         (let ((s* (successor (successor s g) g)))
+           (follow-field-path (state-e s*) field-path s* g parent)))
+        )))
 
 (define (lookup-root-expression b field-path s g parent)
   (printf "lookup-root-expression ~v ~v\n" b s)
@@ -439,10 +433,9 @@
 
 (module+ main
  (conc-eval
-  (compile '(let ((x (if #f
-                         (cons 1 2)
-                         (cons 3 4))))
-              (cdr x)))))
+  (compile '(let ((f (lambda (x) (cons 1 x))))
+              (let ((p (cons 1 2)))
+                (cdr p))))))
 
 ;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
 ;;;; THEREFORE: we only allow aes as update exps

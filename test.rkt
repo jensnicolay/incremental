@@ -116,6 +116,8 @@
 (test-machine '(let ((v (cons 2 3))) (let ((o (cons 1 v))) (let ((w (cdr o))) (car w)))) 2)
 (test-machine '(let ((v (cons 2 3))) (let ((o (cons v 1))) (let ((w (car o))) (car w)))) 2)
 (test-machine '(let ((v (cons 2 3))) (let ((o (cons 1 v))) (let ((v (cdr o))) (cdr v)))) 3)
+(test-machine '(let ((f (lambda (x) (cons x 2)))) (let ((p (f 3))) (car p))) 3)
+(test-machine '(let ((f (lambda (x) (cons 1 x)))) (let ((p (f 3))) (cdr p))) 3)
 
 
 ; set-car! set-cdr!
