@@ -73,16 +73,11 @@
      (let ((κ (state-κ s)))
        (let ((s* (successor s g)))
          (match s*
-           (#f
-            (let ((d-rands (map (lambda (e-rand) (graph-eval-path e-rand field-path s g parent)) e-rands))
-                  (proc (eval (string->symbol x) ns)))
-              ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
-              (apply proc d-rands)))
            ((state (? (lambda (e) (body-expression? e parent)) e-body) _)
             ;(printf "\t~v: compound app with body ~v\n" e e-body)
             (graph-eval-path e-body field-path s* g parent))
            (_
-            (let ((d-rands (map (lambda (e-rand) (graph-eval-path e-rand field-path s g parent)) e-rands))
+            (let ((d-rands (map (lambda (e-rand) (graph-eval e-rand s g parent)) e-rands))
                   (proc (eval (string->symbol x) ns)))
               ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
               (apply proc d-rands)))))))
