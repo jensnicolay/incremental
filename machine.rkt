@@ -141,6 +141,7 @@
       (match s*
         ((state («app» _ e-rator _) _)
          (let ((d-clo (graph-eval e-rator s* g parent)))
+           ;(printf "found lambda: ~v\n" d-clo)
            (clo-s d-clo))))
       ))
 
@@ -385,7 +386,7 @@
          (s-end (system-end-state sys))
          (parent (system-parent sys)))
     (printf "\n\nEXPLORED with end state ~v\n" (state->statei s-end))
-    ;(generate-dot g "grapho")
+    (generate-dot g "grapho")
     (graph-eval (state-e s-end) s-end g parent)))
 
 (define (conc-eval e)
@@ -429,10 +430,14 @@
 
 (module+ main
  (conc-eval
-  (compile '(let ((p (let ((pp (cons 1 2)))
-                       (cons 3 pp))))
-              (let ((c (cdr p)))
-                (cdr c))))))
+  (compile
+   
+   '(let ((x 1))
+    (let ((u (set! x 9)))
+      (let ((p (cons x 1)))
+        (car p))))
+   
+   )))
                       
                 
 

@@ -155,6 +155,11 @@
                          (let ((c2 (cdr c1)))
                            (let ((c3 (car c2)))
                              c3))))))) 1)
+(test-machine '(let ((x 1))
+                 (let ((u (set! x 9)))
+                   (let ((p (cons x 1)))
+                     (car p)))) 9)
+
 
 
 ; set-car! set-cdr!
