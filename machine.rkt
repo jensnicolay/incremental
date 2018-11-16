@@ -94,18 +94,18 @@
        ((cons 'cdr field-path*) (graph-eval-path e-cdr field-path* s g parent))))
     )))
 
-    ;(printf "evalled ~v ~v in ~v = ~v\n" e field-path (user-print s) (user-print d-result))
+    (printf "evalled ~v ~v in ~v: ~v\n" e field-path (user-print s) (user-print d-result))
     d-result
     ))
 
 (define (lookup-binding x s g parent)
-  ;(printf "lookup-binding ~v ~v\n" x s)
+  (printf "lookup-binding ~v ~v\n" x s)
 
   (define (ast-helper s)
     (let* ((e (state-e s))
            (κ (state-κ s))
            (pa (parent e)))
-      ;(printf "ast-helper ~v e ~v pa ~v\n" x e pa)
+      ;(printf "\tast-helper ~v e ~v pa ~v\n" x e pa)
       (match pa
         ((«let» _ _ (== e) _)
          (ast-helper (state pa κ)))
@@ -131,17 +131,17 @@
         ))) ; no binding found
 
   (define (find-lambda s pa) ; s should eval body expr
-    ;(printf "find-lambda ~v ~v\n" s pa)
+    ;(printf "\tfind-lambda ~v ~v\n" s pa)
     (let ((s* (predecessor s g)))
       (match s*
         ((state («app» _ e-rator _) _)
          (let ((d-clo (graph-eval e-rator s* g parent)))
-           ;(printf "found lambda: ~v\n" d-clo)
+           (printf "found lambda: ~v\n" d-clo)
            (clo-s d-clo))))
       ))
 
   (let ((res (ast-helper s)))
-    ;(printf "looked up static ~v = ~v\n" x res)
+    (printf "looked up binding ~v: ~v\n" x res)
     res))
 
 (define (lookup-path x field-path s g parent)
@@ -227,7 +227,7 @@
           )))
 
     (let ((b-root (lookup-root-expression-helper s)))
-      ;(printf "looked up root expression for ~v: ~v\n" b b-root)
+      (printf "looked up root expression for ~v: ~v\n" b b-root)
       b-root))))
 
 (define (lookup-path-dynamic b-root s g parent)
@@ -236,6 +236,7 @@
 
     (define (lookup-dynamic-helper s)
       (let ((s* (predecessor s g)))
+        ;(printf "\tlookup-dynamic-helper ~v\n" s*)
         (match s*
           (#f
            (error "unbound root" b-root))
@@ -270,7 +271,9 @@
              ))
           )))
 
-    (lookup-dynamic-helper s)))
+    (let ((result (lookup-dynamic-helper s)))
+      (printf "dynamically looked up ~v in ~v: ~v\n" b-root s result)
+      result)))
 
 (define (cont s g parent)
   ;(printf "cont e ~v κ ~v\n" e κ)
@@ -397,13 +400,7 @@
  (conc-eval
   (compile
    
-   '(let ((try (lambda (a b)
-                            (let ((z (zero? a)))
-                              (if z
-                                  1
-                                  b)))))
-                 (let ((p (/ 1 0)))
-                   (try 0 p)))
+   '(let ((f (lambda (x) x))) (let ((v (f 999))) v))
   
    )))
                       
