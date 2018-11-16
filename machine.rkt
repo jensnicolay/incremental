@@ -41,25 +41,23 @@
 (define (predecessor s g)
   (hash-ref (graph-bwd g) s #f))
 
-;(define (state-exists? s g)
-;  (hash-ref (graph-fwd g) s #f))
-
 (define (body-expression? e parent)
   («lam»? (parent e)))
-
 
 (define (graph-eval e s g parent)
   (graph-eval-path e '() s g parent))
   
 (define (graph-eval-path e field-path s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
-  (printf "ev ~v ~v in ~v\n" e field-path s)
+  (printf "ev ~v ~v in ~v\n" e field-path (user-print s))
+
+  (let ((d-result
   (match e
-    ((«lit» _ d) ;(printf "-> ~v\n" ((lattice-α lat) d))
+    ((«lit» _ d)
      d)
     ((«id» _ x)
-     (let ((d (lookup-path x field-path s g parent))) ;(printf "-> ~v\n" d)
+     (let ((d (lookup-path x field-path s g parent)))
        d))
-    ((«lam» _ e-params e-body) ;(printf "-> clo ~v\n" s)
+    ((«lam» _ e-params e-body)
      (clo e s))
     ((«let» _ _ _ e-body)
      (let ((s* (state e-body (state-κ s))))
@@ -94,10 +92,14 @@
        ('() s)
        ((cons 'car field-path*) (graph-eval-path e-car field-path* s g parent))
        ((cons 'cdr field-path*) (graph-eval-path e-cdr field-path* s g parent))))
+    )))
+
+    ;(printf "evalled ~v ~v in ~v = ~v\n" e field-path (user-print s) (user-print d-result))
+    d-result
     ))
 
 (define (lookup-static x s g parent)
-  (printf "lookup-static ~v ~v\n" x s)
+  ;(printf "lookup-static ~v ~v\n" x s)
 
   (define (ast-helper s)
     (let* ((e (state-e s))
@@ -141,7 +143,7 @@
       ))
 
   (let ((res (ast-helper s)))
-    (printf "looked up static ~v = ~v\n" x res)
+    ;(printf "looked up static ~v = ~v\n" x res)
     res))
 
 (define (lookup-path x field-path s g parent)
@@ -265,7 +267,7 @@
               (if (equal? κ κ-b)
                   (graph-eval e-b s* g parent)
                   (lookup-dynamic2-helper s*)))
-             (_ ; TIODO not all cases handled yet!
+             (_ ; TODO not all cases handled yet!
               (lookup-dynamic2-helper s*))
              ))
           )))
@@ -353,6 +355,12 @@
 
 ;;; OUTPUT STUFF
 
+(define (user-print d)
+  (match d
+    ((clo e s) `(clo ,e ,(user-print s)))
+    ((state e κ) `(state ,(~a e #:max-width 20) ,κ))
+    (_ d)))
+
 (define (index v x)
   (let ((i (vector-member x v)))
     (if i
@@ -390,9 +398,15 @@
 (module+ main
  (conc-eval
   (compile
-
-   (file->value "test/fib-mut.scm")
    
+   '(let ((try (lambda (a b)
+                            (let ((z (zero? a)))
+                              (if z
+                                  1
+                                  b)))))
+                 (let ((p (/ 1 0)))
+                   (try 0 p)))
+  
    )))
                       
                 
