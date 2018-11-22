@@ -18,7 +18,7 @@
                                                    (define hash-proc (lambda (s rhash) (equal-hash-code (prim-name s))))
                                                    (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (prim-name s))))))
 (struct addr (a) #:transparent)
-(struct binding (x e κ) #:transparent)
+(struct binding (e κ) #:transparent)
 (struct state (e κ) #:transparent)
 (struct system (graph end-state parent) #:transparent)
 (struct graph (fwd bwd initial) #:transparent
@@ -44,6 +44,7 @@
 (define (body-expression? e parent)
   («lam»? (parent e)))
 
+
 (define (graph-eval e s g parent)
   (graph-eval-path e '() s g parent))
   
@@ -66,7 +67,7 @@
      (let ((s* (successor s g)))
        (graph-eval-path (state-e s*) field-path s* g parent)))
     ((«set!» _ _ _)
-     '<undefined>)
+     '<unspecified>)
     ((«app» _ («id» _ x) e-rands) ;TODO: ((lam ...) rands)
      (let ((κ (state-κ s)))
        (let ((s* (successor s g)))
@@ -98,6 +99,63 @@
     d-result
     ))
 
+
+(define (lookup-path x field-path s g parent)
+  (printf "lookup-path ~v ~v ~v\n" x field-path s)
+  (let ((b-root (lookup-root-expression x field-path s g parent)))
+    (if b-root
+        (if (null? field-path)
+            (match-let (((cons e-b s*) b-root))
+              (graph-eval e-b s* g parent))
+            (lookup-path-dynamic b-root s g parent))
+        (eval (string->symbol x) ns))))
+
+
+(define (lookup-root-expression x field-path s g parent)
+  (printf "lookup-root-expression ~v ~v ~v\n" x field-path s)
+  (let ((b (lookup-binding x s g parent)))
+    (match-let (((binding e-b κ-b) b))
+
+    (define (lookup-root-expression-helper s s*)
+        ;(printf "\tlookup-root-expression-helper ~v\n" s*)
+      (match s*
+        (#f #f)
+        ((state e κ)
+         (match e
+           ((«let» _ (== e-b) e-init _)
+            (if (equal? κ κ-b)
+                (follow-field-path e-init field-path s g parent)
+                (lookup-root-expression-helper s* (predecessor s* g))))
+           ((«letrec» _ (== e-b) e-init _)
+            (if (equal? κ κ-b)
+                (follow-field-path e-init field-path s g parent)
+                (lookup-root-expression-helper s* (predecessor s* g))))
+           ((«set!» _ («id» _ (== x)) e-update)
+            (let ((b* (lookup-binding x s* g parent)))
+              (if (equal? b b*)
+                  (follow-field-path e-update field-path s* g parent)
+                  (lookup-root-expression-helper s* (predecessor s* g)))))
+           ((«app» _ _ _)
+            (if (and (body-expression? (state-e s) parent) ; s* is compound call, s is proc entry
+                     (equal? (state-κ s) κ-b))
+                (let* ((e-proc (parent (state-e s)))
+                       (xs («lam»-x e-proc)))
+                  (let param-loop ((xs xs) (e-args («app»-aes e)))
+                    (if (null? xs)
+                        (lookup-root-expression-helper s* (predecessor s* g))
+                        (if (equal? (car xs) e-b)
+                            (follow-field-path (car e-args) field-path s* g parent)
+                            (param-loop (cdr xs) (cdr e-args))))))
+                (lookup-root-expression-helper s* (predecessor s* g))))
+           (_
+            (lookup-root-expression-helper s* (predecessor s* g)))
+           ))
+        ))
+
+    (let ((b-root (lookup-root-expression-helper s (predecessor s g))))
+      (printf "looked up root expression for ~v: ~v\n" b b-root)
+      b-root))))
+
 (define (lookup-binding x s g parent)
   (printf "lookup-binding ~v ~v\n" x s)
 
@@ -110,29 +168,29 @@
         ((«let» _ _ (== e) _)
          (ast-helper (state pa κ)))
         ((«let» _ (and e-decl («id» _ (== x))) _ _)
-         (binding x e-decl κ))
+         (binding e-decl κ))
         ((«letrec» _ (and e-decl («id» _ (== x))) _ _)
-         (binding x e-decl κ))
-        ((«set!» _ _ (== e))
-         (ast-helper (state pa κ)))
+         (binding e-decl κ))
+        ;((«set!» _ _ (== e))
+        ; (ast-helper (state pa κ)))
         ((«lam» _ (list xs ...) _) ; s evals body exp
          (let param-loop ((xs xs))
            (if (null? xs)
-               (ast-helper (find-lambda s pa))
+               (ast-helper (lookup-closure e κ))
                (let ((e-decl (car xs)))
                  (match e-decl
                    ((«id» _ (== x))
-                    (binding x e-decl κ))
+                    (binding e-decl κ))
                    (_
                     (param-loop (cdr xs))))))))
-        (#f (binding x #f #f))
+        (#f (binding #f #f))
         (_
          (ast-helper (state pa κ)))
         ))) ; no binding found
 
-  (define (find-lambda s pa) ; s should eval body expr
-    ;(printf "\tfind-lambda ~v ~v\n" s pa)
-    (let ((s* (predecessor s g)))
+  (define (lookup-closure e κ)
+    ;(printf "\tlookup-closure ~v ~v\n" e κ)
+    (let ((s* (predecessor (state e κ) g)))
       (match s*
         ((state («app» _ e-rator _) _)
          (let ((d-clo (graph-eval e-rator s* g parent)))
@@ -143,16 +201,6 @@
   (let ((res (ast-helper s)))
     (printf "looked up binding ~v: ~v\n" x res)
     res))
-
-(define (lookup-path x field-path s g parent)
-  (printf "lookup-path ~v ~v ~v\n" x field-path s)
-  (let ((b-root (lookup-root-expression x field-path s g parent)))
-    (if b-root
-        (if (null? field-path)
-            (match-let (((cons e-b s*) b-root))
-              (graph-eval e-b s* g parent))
-            (lookup-path-dynamic b-root s g parent))
-        (eval (string->symbol x) ns))))
 
 
 (define (follow-field-path e field-path s g parent)
@@ -184,51 +232,6 @@
          (follow-field-path e-cdr (cons 'cdr field-path) s g parent))
         )))
 
-(define (lookup-root-expression x field-path s g parent)
-  (printf "lookup-root-expression ~v ~v ~v\n" x field-path s)
-  (let ((b (lookup-binding x s g parent)))
-    (match-let (((binding x e-b κ-b) b))
-
-    (define (lookup-root-expression-helper s)
-      (let ((s* (predecessor s g)))
-        ;(printf "\tlookup-root-expression-helper ~v\n" s*)
-        (match s*
-          (#f #f)
-          ((state e κ)
-           (match e
-             ((«let» _ (== e-b) e-init _)
-              (if (equal? κ κ-b)
-                  (follow-field-path e-init field-path s g parent)
-                  (lookup-root-expression-helper s*)))
-             ((«letrec» _ (== e-b) e-init _)
-              (if (equal? κ κ-b)
-                  (follow-field-path e-init field-path s g parent)
-                  (lookup-root-expression-helper s*)))
-             ((«set!» _ («id» _ (== x)) e-update)
-              (let ((b* (lookup-binding x s* g parent)))
-                (if (equal? b b*)
-                    (follow-field-path e-update field-path s* g parent)
-                    (lookup-root-expression-helper s*))))
-             ((«app» _ _ _)
-              (if (and (body-expression? (state-e s) parent) ; s* is compound call, s is proc entry
-                       (equal? (state-κ s) κ-b))
-                  (let* ((e-proc (parent (state-e s)))
-                         (xs («lam»-x e-proc)))
-                    (let param-loop ((xs xs) (e-args («app»-aes e)))
-                      (if (null? xs)
-                          (lookup-root-expression-helper s*)
-                          (if (equal? (car xs) e-b)
-                              (follow-field-path (car e-args) field-path s* g parent)
-                              (param-loop (cdr xs) (cdr e-args))))))
-                  (lookup-root-expression-helper s*)))
-             (_
-              (lookup-root-expression-helper s*))
-             ))
-          )))
-
-    (let ((b-root (lookup-root-expression-helper s)))
-      (printf "looked up root expression for ~v: ~v\n" b b-root)
-      b-root))))
 
 (define (lookup-path-dynamic b-root s g parent)
   (printf "lookup-dynamic ~v ~v\n" b-root s)
