@@ -238,43 +238,42 @@
   (match-let (((cons e-b (state _ κ-b)) b-root))
 
     (define (lookup-dynamic-helper s)
-      (let ((s* (predecessor s g)))
         ;(printf "\tlookup-dynamic-helper ~v\n" s*)
-        (match s*
+        (match s
           (#f
            (error "unbound root" b-root))
           ((state e κ)
            (match e
+             ((«cons» _ (== e-b) _)
+              (if (equal? κ κ-b)
+                  (graph-eval e-b s g parent)
+                  (lookup-dynamic-helper (predecessor s g))))
+             ((«cons» _  _ (== e-b))
+              (if (equal? κ κ-b)
+                  (graph-eval e-b s g parent)
+                  (lookup-dynamic-helper (predecessor s g))))
+;             ((«cons» _ (== e-b) (== e-b)) ; this cannot happen, e-b either needs to be car or cdr?
+;              (error 'TODO))
              ((«set-car!» _ («id» _ x) e-update)
-              (let ((b*-root (lookup-root-expression x '(car) s* g parent)))
+              (let ((b*-root (lookup-root-expression x '(car) s g parent)))
                 (let ((alias? (equal? b*-root b-root)))
                   ;(printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(car) b*-root b-root alias?)
                   (if alias?
-                      (graph-eval e-update s* g parent)
-                      (lookup-dynamic-helper s*)))))
+                      (graph-eval e-update s g parent)
+                      (lookup-dynamic-helper (predecessor s g))))))
              ((«set-cdr!» _ («id» _ x) e-update)
-              (let ((b*-root (lookup-root-expression x '(cdr) s* g parent)))
+              (let ((b*-root (lookup-root-expression x '(cdr) s g parent)))
                 (let ((alias? (equal? b*-root b-root)))
                   ;(printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(cdr) b*-root b-root alias?)
                   (if alias?
-                      (graph-eval e-update s* g parent)
-                      (lookup-dynamic-helper s*)))))
-             ((«cons» _ (== e-b) (== e-b))
-              'TODO)
-             ((«cons» _ (== e-b) _)
-              (if (equal? κ κ-b)
-                  (graph-eval e-b s* g parent)
-                  (lookup-dynamic-helper s*)))
-             ((«cons» _  _ (== e-b))
-              (if (equal? κ κ-b)
-                  (graph-eval e-b s* g parent)
-                  (lookup-dynamic-helper s*)))
+                      (graph-eval e-update s g parent)
+                      (lookup-dynamic-helper (predecessor s g))))))
              (_ ; TODO not all cases handled yet!
-              (lookup-dynamic-helper s*))
+              (lookup-dynamic-helper (predecessor s g)))
              ))
-          )))
+          ))
 
-    (let ((result (lookup-dynamic-helper s)))
+    (let ((result (lookup-dynamic-helper (predecessor s g))))
       (printf "dynamically looked up ~v in ~v: ~v\n" b-root s result)
       result)))
 
