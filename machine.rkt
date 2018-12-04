@@ -45,27 +45,27 @@
   («lam»? (parent e)))
 
 
-(define (graph-eval e s g parent)
-  (graph-eval-path e '() s g parent))
+;(define (graph-eval e s g parent)
+;  (graph-eval-path e '() s g parent))
   
-(define (graph-eval-path e field-path s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
-  (printf "ev ~v ~v in ~v\n" e field-path (user-print s))
+(define (graph-eval e s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
+  (printf "ev ~v in ~v\n" e (user-print s))
 
   (let ((d-result
   (match e
     ((«lit» _ d)
      d)
     ((«id» _ x)
-     (let ((d (lookup-path x field-path s g parent)))
+     (let ((d (lookup-path x '() s g parent)))
        d))
     ((«lam» _ e-params e-body)
      (clo e s))
     ((«let» _ _ _ e-body)
      (let ((s* (state e-body (state-κ s))))
-       (graph-eval-path e-body field-path s* g parent)))
+       (graph-eval e-body s* g parent)))
     ((«if» _ _ _ _)
      (let ((s* (successor s g)))
-       (graph-eval-path (state-e s*) field-path s* g parent)))
+       (graph-eval (state-e s*) s* g parent)))
     ((«set!» _ _ _)
      '<unspecified>)
     ((«app» _ («id» _ x) e-rands) ;TODO: ((lam ...) rands)
@@ -74,28 +74,25 @@
          (match s*
            ((state (? (lambda (e) (body-expression? e parent)) e-body) _)
             ;(printf "\t~v: compound app with body ~v\n" e e-body)
-            (graph-eval-path e-body field-path s* g parent))
+            (graph-eval e-body s* g parent))
            (_
             (let ((d-rands (map (lambda (e-rand) (graph-eval e-rand s g parent)) e-rands))
                   (proc (eval (string->symbol x) ns)))
               ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
               (apply proc d-rands)))))))
     ((«car» _ (and e-id («id» _ x)))
-     (let ((d (lookup-path x (cons 'car field-path) s g parent)))
+     (let ((d (lookup-path x '(car) s g parent)))
        ;(printf "-> ~v\n" d)
        d))
     ((«cdr» _ (and e-id («id» _ x)))
-     (let ((d (lookup-path x (cons 'cdr field-path) s g parent)))
+     (let ((d (lookup-path x '(cdr) s g parent)))
        ;(printf "-> ~v\n" d)
        d))
-    ((«cons» _ e-car e-cdr)
-     (match field-path
-       ('() s)
-       ((cons 'car field-path*) (graph-eval-path e-car field-path* s g parent))
-       ((cons 'cdr field-path*) (graph-eval-path e-cdr field-path* s g parent))))
+    ((«cons» _ _ _)
+      s)
     )))
 
-    (printf "evalled ~v ~v in ~v: ~v\n" e field-path (user-print s) (user-print d-result))
+    (printf "evalled ~v in ~v: ~v\n" e (user-print s) (user-print d-result))
     d-result
     ))
 
