@@ -102,22 +102,24 @@
 
 (define (lookup-path x field-path s g parent)
   (printf "lookup-path ~v ~v ~v\n" x field-path s)
-  (let ((b-root (lookup-root-expression x field-path s g parent)))
+  (let ((b-root (lookup-root x field-path s g parent)))
     (if b-root
         (if (null? field-path)
             (match-let (((cons e-b s*) b-root))
               (graph-eval e-b s* g parent))
             (lookup-path-dynamic b-root s g parent))
-        (eval (string->symbol x) ns))))
+        (if (null? field-path)
+            (eval (string->symbol x) ns)
+            (error "!")))))
 
 
-(define (lookup-root-expression x field-path s g parent)
-  (printf "lookup-root-expression ~v ~v ~v\n" x field-path s)
+(define (lookup-root x field-path s g parent)
+  (printf "lookup-root ~v ~v ~v\n" x field-path s)
   (let ((b (lookup-binding x s g parent)))
     (match-let (((binding e-b κ-b) b))
 
-    (define (lookup-root-expression-helper s s*)
-        ;(printf "\tlookup-root-expression-helper ~v\n" s*)
+    (define (lookup-root-helper s s*)
+        ;(printf "\tlookup-root-helper ~v\n" s*)
       (match s*
         (#f #f)
         ((state e κ)
@@ -125,16 +127,16 @@
            ((«let» _ (== e-b) e-init _)
             (if (equal? κ κ-b)
                 (follow-field-path e-init field-path s g parent)
-                (lookup-root-expression-helper s* (predecessor s* g))))
+                (lookup-root-helper s* (predecessor s* g))))
            ((«letrec» _ (== e-b) e-init _)
             (if (equal? κ κ-b)
                 (follow-field-path e-init field-path s g parent)
-                (lookup-root-expression-helper s* (predecessor s* g))))
+                (lookup-root-helper s* (predecessor s* g))))
            ((«set!» _ («id» _ (== x)) e-update)
             (let ((b* (lookup-binding x s* g parent)))
               (if (equal? b b*)
                   (follow-field-path e-update field-path s* g parent)
-                  (lookup-root-expression-helper s* (predecessor s* g)))))
+                  (lookup-root-helper s* (predecessor s* g)))))
            ((«app» _ _ _)
             (if (and (body-expression? (state-e s) parent) ; s* is compound call, s is proc entry
                      (equal? (state-κ s) κ-b))
@@ -142,17 +144,17 @@
                        (xs («lam»-x e-proc)))
                   (let param-loop ((xs xs) (e-args («app»-aes e)))
                     (if (null? xs)
-                        (lookup-root-expression-helper s* (predecessor s* g))
+                        (lookup-root-helper s* (predecessor s* g))
                         (if (equal? (car xs) e-b)
                             (follow-field-path (car e-args) field-path s* g parent)
                             (param-loop (cdr xs) (cdr e-args))))))
-                (lookup-root-expression-helper s* (predecessor s* g))))
+                (lookup-root-helper s* (predecessor s* g))))
            (_
-            (lookup-root-expression-helper s* (predecessor s* g)))
+            (lookup-root-helper s* (predecessor s* g)))
            ))
         ))
 
-    (let ((b-root (lookup-root-expression-helper s (predecessor s g))))
+    (let ((b-root (lookup-root-helper s (predecessor s g))))
       (printf "looked up root expression for ~v: ~v\n" b b-root)
       b-root))))
 
@@ -209,7 +211,7 @@
       (cons e s)
       (match e
         ((«id» _ x)
-         (lookup-root-expression x field-path s g parent))
+         (lookup-root x field-path s g parent))
         ((«let» _ _ _ e-body)
          (let ((s* (state e-body (state-κ s))))
            (follow-field-path e-body field-path s* g parent)))
@@ -255,14 +257,14 @@
 ;             ((«cons» _ (== e-b) (== e-b)) ; this cannot happen, e-b either needs to be car or cdr?
 ;              (error 'TODO))
              ((«set-car!» _ («id» _ x) e-update)
-              (let ((b*-root (lookup-root-expression x '(car) s g parent)))
+              (let ((b*-root (lookup-root x '(car) s g parent)))
                 (let ((alias? (equal? b*-root b-root)))
                   ;(printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(car) b*-root b-root alias?)
                   (if alias?
                       (graph-eval e-update s g parent)
                       (lookup-dynamic-helper (predecessor s g))))))
              ((«set-cdr!» _ («id» _ x) e-update)
-              (let ((b*-root (lookup-root-expression x '(cdr) s g parent)))
+              (let ((b*-root (lookup-root x '(cdr) s g parent)))
                 (let ((alias? (equal? b*-root b-root)))
                   ;(printf "binding ~v ~v root ~v alias of ~v ? ~v\n" b* '(cdr) b*-root b-root alias?)
                   (if alias?
