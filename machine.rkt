@@ -271,9 +271,8 @@
          (state e-body κ))
         ((«letrec» _ _ (== e) e-body)
          (state e-body κ))
-        ((«lam» _ _ (== e))
+        ((«lam» _ _ _) ;((«lam» _ _ (== e)) always holds because of parent
          (let ((s* (predecessor (state e κ) g)))
-           ;(printf "pop e ~v κ ~v = ~v\n" e κ κs)
            (cont s* g parent)))
         (#f #f)
         (_ (cont-helper p κ))
