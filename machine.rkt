@@ -48,6 +48,12 @@
 (define (graph-eval e s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
   (printf "ev ~v in ~v\n" e (user-print s))
 
+  ; assertion holds: e not id lam lit, s = <e', k>, then e = e'
+  ; (when (and (not (or («id»? e) («lam»? e) («lit»? e)))
+  ;             (not (equal? e (state-e s))))
+  ;   (printf "\n*** ~v ~v\n\n" e (state-e s))
+  ;   (error "assertion failed!"))
+
   (let ((d-result
   (match e
     ((«lit» _ d)

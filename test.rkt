@@ -145,15 +145,17 @@
                        (let ((f (lambda (p g1 g2)
                                   (let ((ca (car p)))
                                     (let ((cd (cdr p)))
-                                      (if (even? ca)
-                                          (g1 cd)
-                                          (g2 cd)))))))
+                                      (let ((xx (even? ca)))
+                                        (if xx
+                                            (g1 cd)
+                                            (g2 cd))))))))
                          (f p2 g-car g-cdr)))))) 2)
 
 (test-machine '(let ((builder (lambda (c p x1 x2) 
-                                (if (even? c)
-                                    (cons x1 p)
-                                    (cons x2 p)))))
+                                (let ((xx (even? c)))
+                                    (if xx
+                                        (cons x1 p)
+                                        (cons x2 p))))))
                  (let ((p1 (builder 0 '() 1 2)))
                    (let ((p2 (builder 3 p1 4 5)))
                      (let ((p3 (builder 6 p2 7 8)))
