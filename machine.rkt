@@ -163,7 +163,7 @@
               ((«if» _ _ _ _)
               (let ((s* (successor s g)))
                 (lookup-path-root-helper (state-e s*) field-path s* g parent)))
-              ((«app» _ e-rator e-rands)
+              ((«app» _ _ _)
               (let ((s* (successor s g)))
                 (lookup-path-root-helper (state-e s*) field-path s* g parent)))
               ((«cons» _ e-car e-cdr)
@@ -191,14 +191,12 @@
            (pa (parent e)))
       ;(printf "\tast-helper ~v e ~v pa ~v\n" x e pa)
       (match pa
-        ((«let» _ _ (== e) _)
-         (ast-helper (state pa κ)))
-        ((«let» _ (and e-decl («id» _ (== x))) _ _)
-         (binding e-decl κ))
-        ((«letrec» _ (and e-decl («id» _ (== x))) _ _)
-         (binding e-decl κ))
-        ;((«set!» _ _ (== e))
-        ; (ast-helper (state pa κ)))
+        ;((«let» _ _ (== e) _)
+        ;(ast-helper (state pa κ)))
+        ((«let» _ (and v («id» _ (== x))) (not (== e)) _)
+         (binding v κ))
+        ((«letrec» _ (and v («id» _ (== x))) _ _)
+         (binding v κ))
         ((«lam» _ (list xs ...) _) ; s evals body exp
          (let param-loop ((xs xs))
            (if (null? xs)
@@ -211,6 +209,11 @@
                     (param-loop (cdr xs))))))))
         (#f (binding #f #f))
         (_
+
+          ; (when (not (hash-has-key? (graph-fwd g) (state pa κ)))
+          ;   (printf "\n*** ~v ~v\n" pa κ)
+          ;   (error "assertion failed"))
+
          (ast-helper (state pa κ)))
         ))) ; no binding found
 
