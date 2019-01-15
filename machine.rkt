@@ -46,7 +46,7 @@
 ;  (graph-eval-path e '() s g parent))
   
 (define (graph-eval e s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
-  (printf "ev ~v in ~v\n" e (user-print s))
+  (debug-print-in "#~v: graph-eval ~v" (state->statei s) e)
 
   ; assertion holds: e not id lam lit, s = <e', k>, then e = e'
   ; (when (and (not (or («id»? e) («lam»? e) («lit»? e)))
@@ -96,12 +96,12 @@
        (eval-path-root path-root s g parent)))
     )))
 
-    (printf "evalled ~v in ~v: ~v\n" e (user-print s) (user-print d-result))
+    (debug-print-out "#~v: graph-eval ~v: ~v" (state->statei s) e (user-print d-result))
     d-result
     ))
 
 (define (lookup-var-root x s g parent)
-  (printf "lookup-var-root ~v ~v ~v\n" x 'field-path s)
+  (debug-print-in "#~v: lookup-var-root ~v" (state->statei s) x)
   (let ((b (lookup-binding x s g parent)))
     (match-let (((binding e-b κ-b) b))
 
@@ -143,15 +143,16 @@
           )))
 
     (let ((root (lookup-root-helper s)))
-      (printf "looked up root expression for ~v ~v: ~v\n" b 'field-path root)
+      (debug-print-out "#~v: lookup-var-root ~v: ~a" (state->statei s) x (user-print root))
       root))))
 
 (define (lookup-path-root x field-path s g parent)
+  (debug-print-in "#~v: lookup-path-root ~v ~v" (state->statei s) x field-path)
+
   (let ((var-root (lookup-var-root x s g parent)))
     (match-let (((root e-var-root s-var-root) var-root))
 
       (define (lookup-path-root-helper e field-path s g parent)
-        (printf "follow-path ~v ~v ~v\n" e field-path s)
         (if (null? field-path)
             (root e s)
             (match e
@@ -180,10 +181,11 @@
               )))
 
       (let ((path-root (lookup-path-root-helper e-var-root field-path s-var-root g parent)))
+        (debug-print-out "#~v: lookup-path-root ~v ~v: ~a" (state->statei s) x field-path (user-print path-root))
         path-root))))
 
 (define (lookup-binding x s g parent)
-  (printf "lookup-binding ~v ~v\n" x s)
+  (debug-print-in "#~v: lookup-binding ~v" (state->statei s) x)
 
   (define (ast-helper s)
     (let* ((e (state-e s))
@@ -218,21 +220,27 @@
         ))) ; no binding found
 
   (define (lookup-closure e κ)
+
+        ; this assertion fails!!! (e, κ) does not need to be a state!
+        ;  (when (not (hash-has-key? (graph-fwd g) (state e κ)))
+        ;    (printf "\n*** ~v ~v\n" e κ)
+        ;    (error "assertion failed"))
+
     ;(printf "\tlookup-closure ~v ~v\n" e κ)
     (let ((s* (predecessor (state e κ) g)))
       (match s*
         ((state («app» _ e-rator _) _)
          (let ((d-clo (graph-eval e-rator s* g parent)))
-           (printf "found lambda: ~v\n" d-clo)
+           (debug-print "found closure: ~v" d-clo)
            (clo-s d-clo))))
       ))
 
   (let ((res (ast-helper s)))
-    (printf "looked up binding ~v: ~v\n" x res)
+    (debug-print-out "#~v: lookup-binding ~v: ~v" (state->statei s) x res)
     res))
 
 (define (eval-path-root path-root s g parent) ; l-dynamic
-  (printf "eval-path-root ~v ~v\n" path-root s)
+  (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print path-root))
   (match-let (((root e-b (state _ κ-b)) path-root))
 
     (define (eval-path-root-helper s)
@@ -244,11 +252,27 @@
            (match e
              ((«cons» _ (== e-b) _)
               (if (equal? κ κ-b)
-                  (graph-eval e-b s g parent)
+                  (begin
+
+                    ; assertion holds: we are always in the root state here
+                    (when (not (equal? (root-s path-root) s))
+                      (printf "\n*** ~v ~v\n\n" (root-s path-root) s)
+                      (error "assertion failed!"))
+
+                    (graph-eval e-b s g parent)
+                  )
                   (eval-path-root-helper (predecessor s g))))
              ((«cons» _  _ (== e-b))
               (if (equal? κ κ-b)
-                  (graph-eval e-b s g parent)
+                  (begin
+                  
+                    ; assertion holds: we are always in the root state here
+                    (when (not (equal? (root-s path-root) s))
+                      (printf "\n*** ~v ~v\n\n" (root-s path-root) s)
+                      (error "assertion failed!"))                  
+                  
+                    (graph-eval e-b s g parent)
+                  )
                   (eval-path-root-helper (predecessor s g))))
 ;             ((«cons» _ (== e-b) (== e-b)) ; this cannot happen, e-b either needs to be car or cdr?
 ;              (error 'TODO))
@@ -268,7 +292,7 @@
           ))
 
     (let ((result (eval-path-root-helper (predecessor s g))))
-      (printf "evalled root ~v in ~v: ~v\n" root s result)
+      (debug-print-out "#~v: eval-path-root ~a: ~v" (state->statei s) (user-print path-root) result)
       result)))
 
 (define (cont s g parent)
@@ -291,7 +315,7 @@
   (cont-helper (state-e s) (state-κ s)))
    
   (define (step s g parent)
-    (printf "\n#~v\nstep ~v\n" (state->statei s) s)
+    (debug-print "\n#~v\nstep ~v" (state->statei s) s)
     (match-let (((state e κ) s))
       (match e
         ((«let» _ _ init _)
@@ -340,8 +364,8 @@
          (g (system-graph sys))
          (s-end (system-end-state sys))
          (parent (system-parent sys)))
-    (printf "\n\nEXPLORED with end state ~v\n" (state->statei s-end))
-    ;(generate-dot g "grapho")
+    (debug-print "\n\nEXPLORED with end state ~v" (state->statei s-end))
+    (generate-dot g "grapho")
     (graph-eval (state-e s-end) s-end g parent)))
 
 (define (conc-eval e)
@@ -349,10 +373,24 @@
 
 ;;; OUTPUT STUFF
 
+(define debug-print-level 0)
+(define (debug-print-in . args)
+  (apply debug-print args)
+  (set! debug-print-level (add1 debug-print-level)))
+(define (debug-print-out . args)
+  (set! debug-print-level (sub1 debug-print-level))
+  (apply debug-print args))
+(define (debug-print . args)
+  (for ((i debug-print-level))
+    (display " "))
+  (apply printf args)
+  (newline))
+
 (define (user-print d)
   (match d
     ((clo e s) `(clo ,e ,(user-print s)))
-    ((state e κ) `(state ,(~a e #:max-width 20) ,κ))
+    ((state e κ) (format "#~v" (state->statei d)))
+    ((root e s) `(root ,e ,(user-print s)))
     (_ d)))
 
 (define (index v x)
@@ -392,14 +430,48 @@
 (module+ main
  (conc-eval
   (compile
-   
-   '(let ((f (lambda (x) x))) (let ((v (f 999))) v))
-  
-   )))
-                      
-                
+    p2
 
-               
+  )))
+
+; find-lambda
+    ;  '(let ((x 0))
+    ;     (let ((f (lambda (g) (g))))
+    ;       (let ((x 1))
+    ;         (let ((h (lambda () x)))
+    ;             (f h)))))
+
+
+(define p1 '(let ((z (cons 0 1))) 
+                 (let ((a (cons 2 3)))
+                   (let ((b (cons 4 a))) 
+                     (let ((c (cons 5 z)))
+                       (let ((u (set! b c)))
+                         (let ((d (cdr b)))
+                           (let ((v (set-car! z 9)))
+                             (car d))))))))
+)
+
+(define p2 '(let ((f (lambda (x)
+                 (lambda () 
+                      x))))
+        (let ((g (f 1)))
+            (let ((h (f 2)))
+                (g))))
+)                
+
+  ; '(let ((x 0))
+  ;   (let ((f (lambda (g)
+  ;               g)))
+  ;     (let ((a (lambda () x)))
+  ;       (let ((b (lambda () 1)))
+  ;           (let ((fa (f a)))
+  ;             (let ((fb (f b)))
+  ;               (fa)))))))
+
+                      
+(define p-let-rule '(let ((f (lambda (x) x))) (let ((v (f 999))) v)))
+           
 
 ;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
 ;;;; THEREFORE: we only allow aes as update exps
