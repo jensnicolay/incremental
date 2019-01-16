@@ -241,41 +241,21 @@
 
 (define (eval-path-root path-root s g parent) ; l-dynamic
   (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print path-root))
-  (match-let (((root e-b (state _ κ-b)) path-root))
+  (match-let (((root e-b s-b) path-root))
 
     (define (eval-path-root-helper s)
         ;(printf "\teval-path-root-helper ~v\n" s*)
         (match s
 ;          (#f
 ;           (error "unbound root" root))
+          ((== s-b)
+           (match (state-e s-b)
+             ((«cons» _ (== e-b) _)
+              (graph-eval e-b s g parent))
+             ((«cons» _ _ (== e-b))
+              (graph-eval e-b s g parent))))
           ((state e κ)
            (match e
-             ((«cons» _ (== e-b) _)
-              (if (equal? κ κ-b)
-                  (begin
-
-                    ; assertion holds: we are always in the root state here
-                    (when (not (equal? (root-s path-root) s))
-                      (printf "\n*** ~v ~v\n\n" (root-s path-root) s)
-                      (error "assertion failed!"))
-
-                    (graph-eval e-b s g parent)
-                  )
-                  (eval-path-root-helper (predecessor s g))))
-             ((«cons» _  _ (== e-b))
-              (if (equal? κ κ-b)
-                  (begin
-                  
-                    ; assertion holds: we are always in the root state here
-                    (when (not (equal? (root-s path-root) s))
-                      (printf "\n*** ~v ~v\n\n" (root-s path-root) s)
-                      (error "assertion failed!"))                  
-                  
-                    (graph-eval e-b s g parent)
-                  )
-                  (eval-path-root-helper (predecessor s g))))
-;             ((«cons» _ (== e-b) (== e-b)) ; this cannot happen, e-b either needs to be car or cdr?
-;              (error 'TODO))
              ((«set-car!» _ («id» _ x) e-update)
               (let* ((path-root* (lookup-path-root x '(car) s g parent)))
                 (if (equal? path-root* path-root)
