@@ -66,6 +66,10 @@
        )))
     ((«lam» _ e-params e-body)
      (clo e s))
+    ((«quo» _ (cons _ _))
+     s)
+    ((«quo» _ d)
+     d)
     ((«let» _ _ _ e-body)
      (let ((s* (state e-body (state-κ s))))
        (graph-eval e-body s* g parent)))
@@ -105,9 +109,9 @@
   (let ((b (lookup-binding x s g parent)))
     (match-let (((binding e-b κ-b) b))
 
-    (define (lookup-root-helper s)
-        ;(printf "\tlookup-root-helper ~v\n" s*)
+    (define (lookup-var-root-helper s)
       (let ((s* (predecessor s g)))
+        (debug-print "#~v: lookup-var-root-helper #~v" (state->statei s) (state->statei s*))
         (match s*
           (#f #f)
           ((state e κ)
@@ -115,16 +119,16 @@
             ((«let» _ (== e-b) e-init _)
               (if (equal? κ κ-b)
                   (root e-init s)
-                  (lookup-root-helper s*)))
+                  (lookup-var-root-helper s*)))
             ((«letrec» _ (== e-b) e-init _)
               (if (equal? κ κ-b)
                   (root e-init s)
-                  (lookup-root-helper s*)))
+                  (lookup-var-root-helper s*)))
             ((«set!» _ («id» _ (== x)) e-update)
               (let ((b* (lookup-binding x s* g parent)))
                 (if (equal? b b*)
                     (root e-update s*)
-                    (lookup-root-helper s*))))
+                    (lookup-var-root-helper s*))))
             ((«app» _ _ _)
               (if (and (body-expression? (state-e s) parent) ; s* is compound call, s is proc entry
                       (equal? (state-κ s) κ-b))
@@ -132,17 +136,17 @@
                         (xs («lam»-x e-proc)))
                     (let param-loop ((xs xs) (e-args («app»-aes e)))
                       (if (null? xs)
-                          (lookup-root-helper s*)
+                          (lookup-var-root-helper s*)
                           (if (equal? (car xs) e-b)
                               (root (car e-args) s*)
                               (param-loop (cdr xs) (cdr e-args))))))
-                  (lookup-root-helper s*)))
+                  (lookup-var-root-helper s*)))
             (_
-              (lookup-root-helper s*))
+              (lookup-var-root-helper s*))
             ))
           )))
 
-    (let ((root (lookup-root-helper s)))
+    (let ((root (lookup-var-root-helper s)))
       (debug-print-out "#~v: lookup-var-root ~v: ~a" (state->statei s) x (user-print root))
       root))))
 
@@ -153,11 +157,25 @@
     (match-let (((root e-var-root s-var-root) var-root))
 
       (define (lookup-path-root-helper e field-path s g parent)
+        (debug-print "#~v: lookup-path-root-helper ~v ~v" (state->statei s) e field-path)
         (if (null? field-path)
             (root e s)
             (match e
               ((«id» _ x)
-              (lookup-path-root x field-path s g parent))
+               (lookup-path-root x field-path s g parent))
+              ((«quo» _ e)
+               (let loop ((e e) (field-path field-path))
+                (match field-path
+                  ((cons 'car field-path*)
+                   (if (pair? (car e))
+                       (loop (car e) field-path*)
+                       (root (car e) s)))
+                  ((cons 'cdr field-path*)
+                   (if (pair? (cdr e))
+                       (loop (cdr e) field-path*)
+                       (root (cdr e) s)))
+                  ('() (root e s))
+                  )))
               ((«let» _ _ _ e-body)
               (let ((s* (state e-body (state-κ s))))
                 (lookup-path-root-helper e-body field-path s* g parent)))
@@ -253,7 +271,9 @@
              ((«cons» _ (== e-b) _)
               (graph-eval e-b s g parent))
              ((«cons» _ _ (== e-b))
-              (graph-eval e-b s g parent))))
+              (graph-eval e-b s g parent))
+             ((«quo» _ e)
+              e-b))) ; no eval because Scheme type
           ((state e κ)
            (match e
              ((«set-car!» _ («id» _ x) e-update)
@@ -410,7 +430,12 @@
 (module+ main
  (conc-eval
   (compile
-    p2
+
+   '(let ((x (cons 0 1)))
+                 (let ((y (cons 2 3)))
+                   (let ((u (set-cdr! x y)))
+                     (let ((a (cdr x)))
+                       (car a)))))
 
   )))
 

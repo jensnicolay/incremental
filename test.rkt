@@ -231,6 +231,14 @@
                      (f cell))))
               3)
 
+(test-machine '(let ((x (cons 0 1)))
+                 (let ((y (cons 2 3)))
+                   (let ((u (set-cdr! x y)))
+                     (let ((a (cdr x)))
+                       (car a))))) 2)
+
+              
+
 ; lazy
 (test-machine '(let ((try (lambda (a b)
                             (let ((z (zero? a)))
