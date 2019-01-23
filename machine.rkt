@@ -153,6 +153,22 @@
 (define (lookup-path-root x field-path s g parent)
   (debug-print-in "#~v: lookup-path-root ~v ~v" (state->statei s) x field-path)
 
+  (define (follow-field-path field-path e s g parent)
+    (let ((d (graph-eval e s g parent)))
+      (match d
+        ((state e* κ*)
+          (match e*
+            ((«cons» _ e-car e-cdr)
+              (match field-path
+                ((cons 'car '())
+                (root e-car d))
+                ((cons 'cdr '())
+                (root e-cdr d))
+                ((list-rest field-path* ... 'car '())
+                (lookup-path-root («id»-x e-car) field-path* d g parent))
+                ((list-rest field-path* ... 'cdr '())
+                (lookup-path-root («id»-x e-cdr) field-path* d g parent)))))))))
+
   (let ((var-binding (lookup-binding x s g parent)))
       (if (null? field-path)
           (let ((var-root (lookup-var-root x var-binding s g parent)))
@@ -189,21 +205,8 @@
                                   (xs («lam»-x e-proc)))
                               (let param-loop ((xs xs) (e-args («app»-aes e)))
                                 (if (equal? (car xs) e-b)
-                                    (let ((d (graph-eval (car e-args) s* g parent)))
-                                      (match d
-                                        ((state e* κ*)
-                                        (match e*
-                                            ((«cons» _ e-car e-cdr)
-                                              (match field-path
-                                                ((cons 'car '())
-                                                (root e-car d))
-                                                ((cons 'cdr '())
-                                                (root e-cdr d))
-                                                ((list-rest field-path* ... 'car '())
-                                                (lookup-path-root («id»-x e-car) field-path* d g parent))
-                                                ((list-rest field-path* ... 'cdr '())
-                                                (lookup-path-root («id»-x e-cdr) field-path* d g parent))))))))
-                                        (param-loop (cdr xs) (cdr e-args)))))
+                                    (follow-field-path field-path (car e-args) s* g parent)
+                                    (param-loop (cdr xs) (cdr e-args)))))
                             (lookup-path-root-helper field-path s* g parent)))   
                       ((«let» _ (== e-b) («car» _ («id» _ y)) _)
                         (if (equal? κ κ-b)
@@ -215,37 +218,11 @@
                             (lookup-path-root-helper field-path s* g parent)))
                       ((«let» _ (== e-b) e-init _)
                         (if (equal? κ κ-b) 
-                            (let ((d (graph-eval e-init s g parent)))
-                              (match d
-                                ((state e* κ*)
-                                  (match e*
-                                    ((«cons» _ e-car e-cdr)
-                                      (match field-path
-                                        ((cons 'car '())
-                                        (root e-car d))
-                                        ((cons 'cdr '())
-                                        (root e-cdr d))
-                                        ((list-rest field-path* ... 'car '())
-                                        (lookup-path-root («id»-x e-car) field-path* d g parent))
-                                        ((list-rest field-path* ... 'cdr '())
-                                        (lookup-path-root («id»-x e-cdr) field-path* d g parent))))))))
+                            (follow-field-path field-path e-init s g parent)
                             (lookup-path-root-helper field-path s* g parent)))
                       ((«letrec» _ (== e-b) e-init _)
                         (if (equal? κ κ-b)
-                            (let ((d (graph-eval e-init s g parent)))
-                              (match d
-                                ((state e* κ*)
-                                  (match e*
-                                    ((«cons» _ e-car e-cdr)
-                                      (match field-path
-                                        ((cons 'car '())
-                                        (root e-car d))
-                                        ((cons 'cdr '())
-                                        (root e-cdr d))
-                                        ((list-rest field-path* ... 'car '())
-                                        (lookup-path-root («id»-x e-car) field-path* d g parent))
-                                        ((list-rest field-path* ... 'cdr '())
-                                        (lookup-path-root («id»-x e-cdr) field-path* d g parent))))))))
+                            (follow-field-path field-path e-init s g parent)
                             (lookup-path-root-helper field-path s* g parent)))
                       ((«set!» _ («id» _ (== x)) e-update)
                         (let ((b* (lookup-binding x s* g parent)))
