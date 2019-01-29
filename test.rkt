@@ -309,7 +309,27 @@
                             (let ((x1 (car p)))
                               (let ((v (h p)))
                                 (let ((x2 (car q)))
-                                  (+ x1 x2)))))))))) 13)                              
+                                  (+ x1 x2)))))))))) 13) 
+
+(test-machine '(let ((x (cons 0 1)))
+                (let ((y x))
+                  (let ((u (set-cdr! x 9)))
+                    (cdr x)))) 9)
+
+(test-machine '(let ((x (cons 0 1)))
+                (let ((y x))
+                  (let ((u (set-cdr! y 9)))
+                    (cdr x)))) 9)
+
+(test-machine '(let ((x (cons 0 1)))
+                (let ((y x))
+                  (let ((u (set-cdr! x 9)))
+                    (cdr y)))) 9)
+
+(test-machine '(let ((x (cons 0 1)))
+                (let ((y x))
+                  (let ((u (set-cdr! y 9)))
+                    (cdr y)))) 9)
 
 ; lazy
 (test-machine '(let ((try (lambda (a b)
