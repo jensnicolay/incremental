@@ -42,9 +42,6 @@
   («lam»? (parent e)))
 
 
-;(define (graph-eval e s g parent)
-;  (graph-eval-path e '() s g parent))
-  
 (define (graph-eval e s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
   (debug-print-in "#~v: graph-eval ~v" (state->statei s) e)
 
@@ -53,8 +50,6 @@
   ;             (not (equal? e (state-e s))))
   ;   (printf "\n*** ~v ~v\n\n" e (state-e s))
   ;   (error "assertion failed!"))
-
-;(eval (string->symbol x) ns)
 
   (let ((d-result
   (match e
@@ -212,36 +207,30 @@
     (debug-print-out "#~v: lookup-binding ~v: ~v" (state->statei s) x res)
     res))
 
-(define (eval-path-root e-b κ-b s g parent) ; l-dynamic
+(define (eval-path-root e-r κ-r s g parent) ; l-dynamic
   (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print 'path-root))
 
     (define (eval-path-root-helper s)
         ;(debug-print "#~v: eval-path-root-helper ~v" (state->statei s) (user-print path-root))
         (match s
-;          (#f
-;           (error "unbound root" root))
-          ((state (== e-b) (== κ-b))
-           (graph-eval e-b s g parent))
-          ((state («cons» _ (== e-b) _) (== κ-b))
-           (graph-eval e-b s g parent))
-          ((state («cons» _ _ (== e-b)) (== κ-b))
-           (graph-eval e-b s g parent))
+          ((state («cons» _ (== e-r) _) (== κ-r))
+           (graph-eval e-r s g parent))
+          ((state («cons» _ _ (== e-r)) (== κ-r))
+           (graph-eval e-r s g parent))
           ((state e κ)
            (match e
              ((«set-car!» _ e-id e-update)
               (let ((d* (graph-eval e-id s g parent)))
                (match d*
-                 ((state («cons» _ e-car e-cdr) κ*)
-                  (if (and (equal? e-car e-b) (equal? κ* κ-b))
-                      (graph-eval e-update s g parent)
-                      (eval-path-root-helper (predecessor s g)))))))
+                 ((state («cons» _ (== e-r) _) (== κ-r))
+                  (graph-eval e-update s g parent))
+                 (_ (eval-path-root-helper (predecessor s g))))))
              ((«set-cdr!» _ e-id e-update)
               (let ((d* (graph-eval e-id s g parent)))
                (match d*
-                 ((state («cons» _ e-car e-cdr) κ*)
-                  (if (and (equal? e-cdr e-b) (equal? κ* κ-b))
-                      (graph-eval e-update s g parent)
-                      (eval-path-root-helper (predecessor s g)))))))
+                 ((state («cons» _ _ (== e-r)) (== κ-r))
+                  (graph-eval e-update s g parent))
+                 (_ (eval-path-root-helper (predecessor s g))))))
              (_ ; TODO not all cases handled yet!
               (eval-path-root-helper (predecessor s g)))
              ))
@@ -387,7 +376,10 @@
  (conc-eval
   (compile
 
-       p2
+       '(let ((a (cons 0 1)))
+         (let ((b (cons 2 3)))
+           (let ((u (set-car! a b)))
+             a)))
 
   )))
 
