@@ -341,10 +341,10 @@
                    (try 0 p)))
               1)
 
-(test-machine '(letrec ((ones (cons 1 ones)))
-                 (let ((d1 (cdr ones)))
-                   (car d1)))
-              1)
+; (test-machine '(letrec ((ones (cons 1 ones)))
+;                  (let ((d1 (cdr ones)))
+;                    (car d1)))
+;               1) DOESN'T WORK in regular Scheme AND graph-eval (since eval-binding starts lookup in pred state) 
 
 
 ; 'real' programs

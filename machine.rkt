@@ -18,7 +18,7 @@
                                                    (define hash-proc (lambda (s rhash) (equal-hash-code (prim-name s))))
                                                    (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (prim-name s))))))
 (struct state (e κ) #:transparent)
-(struct binding (e κ) #:transparent)
+;(struct var-root (e κ) #:transparent)
 (struct root (e s) #:transparent)
 (struct system (graph end-state parent) #:transparent)
 (struct graph (fwd bwd initial) #:transparent
@@ -56,10 +56,10 @@
     ((«lit» _ d)
      d)
     ((«id» _ x)
-     (let ((var-root (lookup-var-root x s g parent)))
-      (match var-root
-        ((root e-r s-r) (graph-eval e-r s-r g parent))
-        (#f (eval (string->symbol x) ns)))))
+     (let ((b (lookup-var-root x s g parent)))
+       (if b
+           (eval-var-root x b s g parent)
+           (eval (string->symbol x) ns))))
     ((«lam» _ e-params e-body)
      (clo e s))
     ((«quo» _ (cons _ _))
@@ -89,15 +89,11 @@
     ((«cons» _ _ _)
       s)
     ((«car» _ e-id)
-     (let ((d* (graph-eval e-id s g parent)))
-       (match d*
-         ((state («cons» _ e-car _) κ*)
-          (eval-path-root e-car κ* s g parent)))))
+     (let ((r (lookup-path-root e-id 'car s g parent)))
+        (eval-path-root r s g parent)))
     ((«cdr» _ e-id)
-     (let ((d* (graph-eval e-id s g parent)))
-       (match d*
-         ((state («cons» _ _ e-cdr) κ*)
-          (eval-path-root e-cdr κ* s g parent)))))
+     (let ((r (lookup-path-root e-id 'cdr s g parent)))
+        (eval-path-root r s g parent)))
     )))
 
     (debug-print-out "#~v: graph-eval ~v: ~v" (state->statei s) e (user-print d-result))
@@ -105,55 +101,7 @@
     ))
 
 (define (lookup-var-root x s g parent)
-  (debug-print-in "#~v: lookup-var-root ~v" (state->statei s) x)
-
-  (let ((b (lookup-binding x s g parent)))
-    (match-let (((binding e-b κ-b) b))
-
-    (define (lookup-var-root-helper s)
-      (let ((s* (predecessor s g)))
-        ;(debug-print "#~v: lookup-var-helper #~v" (state->statei s) (state->statei s*))
-        (match s*
-          (#f #f)
-          ((state e κ)
-          (match e
-            ((«let» _ (== e-b) e-init _)
-              (if (equal? κ κ-b)
-                  (root e-init s)
-                  (lookup-var-root-helper s*)))
-            ((«letrec» _ (== e-b) e-init _)
-              (if (equal? κ κ-b)
-                  (root e-init s)
-                  (lookup-var-root-helper s*)))
-            ((«set!» _ («id» _ (== x)) e-update)
-              (let ((b* (lookup-binding x s* g parent)))
-                (if (equal? b b*)
-                    (root e-update s*)
-                    (lookup-var-root-helper s*))))
-            ((«app» _ _ _)
-              (if (and (body-expression? (state-e s) parent) ; s* is compound call, s is proc entry
-                      (equal? (state-κ s) κ-b))
-                  (let* ((e-proc (parent (state-e s)))
-                        (xs («lam»-x e-proc)))
-                    (let param-loop ((xs xs) (e-args («app»-aes e)))
-                      (if (null? xs)
-                          (lookup-var-root-helper s*)
-                          (if (equal? (car xs) e-b)
-                              (root (car e-args) s*)
-                              (param-loop (cdr xs) (cdr e-args))))))
-                  (lookup-var-root-helper s*)))
-            (_
-              (lookup-var-root-helper s*))
-            ))
-          )))
-
-    (let ((d (lookup-var-root-helper s)))
-      (debug-print-out "#~v: lookup-var-root ~v: ~a" (state->statei s) x (user-print d))
-      d))))
-
-
-(define (lookup-binding x s g parent)
-  (debug-print-in "#~v: lookup-binding ~v" (state->statei s) x)
+  (debug-print-in "#~v: lookup-var-root ~a" (state->statei s) x)
 
   (define (ast-helper s)
     (let* ((e (state-e s))
@@ -163,82 +111,102 @@
       (match pa
         ;((«let» _ _ (== e) _)
         ;(ast-helper (state pa κ)))
-        ((«let» _ (and v («id» _ (== x))) (not (== e)) _)
-         (binding v κ))
-        ((«letrec» _ (and v («id» _ (== x))) _ _)
-         (binding v κ))
-        ((«lam» _ (list xs ...) _) ; s evals body exp
-         (let param-loop ((xs xs))
-           (if (null? xs)
-               (ast-helper (lookup-closure e κ))
-               (let ((e-decl (car xs)))
-                 (match e-decl
-                   ((«id» _ (== x))
-                    (binding e-decl κ))
-                   (_
-                    (param-loop (cdr xs))))))))
-        (#f (binding #f #f))
+        ((«let» _ («id» _ (== x)) (and (not (== e)) e-init) _)
+         (root e-init (state e-init κ))) ; successor state exists because of `step`
+        ((«letrec» _ («id» _ (== x)) e-init _)
+         (root e-init (state e-init κ))) ; successor state exists because of `step`
+        ((«lam» _ (list xs ...) _) ; s evals body exp e
+         (let ((s* (predecessor (state e κ) g))) ; s* is application of compound
+          (match s*
+            ((state («app» _ e-rator e-args) _)
+             (let param-args-loop ((xs xs) (e-args e-args))
+               (if (null? xs)
+                   (let* ((d-clo (graph-eval e-rator s* g parent))
+                          (s** (clo-s d-clo))) ; s** is where closure was created
+                     (debug-print "found closure: ~v" d-clo)
+                     (ast-helper s**))
+                   (let ((e-decl (car xs)))
+                     (match e-decl
+                        ((«id» _ (== x))
+                         (root (car e-args) s*))
+                        (_
+                         (param-args-loop (cdr xs) (cdr e-args)))))))))))
+        (#f #f) ; no parent = no var-root found
         (_
-
           ; (when (not (hash-has-key? (graph-fwd g) (state pa κ)))
           ;   (printf "\n*** ~v ~v\n" pa κ)
           ;   (error "assertion failed"))
-
          (ast-helper (state pa κ)))
-        ))) ; no binding found
+        )))
 
-  (define (lookup-closure e κ)
+  (let ((r (ast-helper s)))
+    (debug-print-out "#~v: lookup-var-root ~a: ~a" (state->statei s) x (user-print r))
+    r))
 
-        ; this assertion fails!!! (e, κ) does not need to be a state!
-        ;  (when (not (hash-has-key? (graph-fwd g) (state e κ)))
-        ;    (printf "\n*** ~v ~v\n" e κ)
-        ;    (error "assertion failed"))
+(define (eval-var-root x b s g parent) ; the `x` param is optimization (see below)
+  (debug-print-in "#~v: eval-var-root ~a" (state->statei s) (user-print b))
 
-    ;(printf "\tlookup-closure ~v ~v\n" e κ)
-    (let ((s* (predecessor (state e κ) g)))
-      (match s*
-        ((state («app» _ e-rator _) _)
-         (let ((d-clo (graph-eval e-rator s* g parent)))
-           (debug-print "found closure: ~v" d-clo)
-           (clo-s d-clo))))
-      ))
+  (match-let (((root e-b s-b) b))
 
-  (let ((res (ast-helper s)))
-    (debug-print-out "#~v: lookup-binding ~v: ~v" (state->statei s) x res)
-    res))
+  (define (eval-var-root-helper s)
+      ;(debug-print "#~v: eval-var-root-helper #~v" (state->statei s) (state->statei s*))
+      (match s
+        ((== s-b)
+         (graph-eval e-b s-b g parent))
+        ((state e κ)
+         (match e
+            ((«set!» _ («id» _ (== x)) e-update) ; `== x` avoids looking up var-roots for different name (which can never match `b` anyway)
+              (let ((b* (lookup-var-root x s g parent)))
+                (if (equal? b b*)
+                    (graph-eval e-update s g parent)
+                    (eval-var-root-helper (predecessor s g)))))
+            (_
+              (eval-var-root-helper (predecessor s g)))
+            ))
+          ))
 
-(define (eval-path-root e-r κ-r s g parent) ; l-dynamic
-  (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print 'path-root))
+  (let ((d (eval-var-root-helper (predecessor s g))))
+    (debug-print-out "#~v: eval-var-root ~a: ~a" (state->statei s) (user-print b) (user-print d))
+    d)))
+
+(define (lookup-path-root e-id f s g parent)   
+  (let ((d (graph-eval e-id s g parent)))
+    (match* (d f)
+      (((state («cons» _ e-car _) _) 'car)
+       (root e-car d))
+      (((state («cons» _ _ e-cdr) _) 'cdr)
+       (root e-cdr d)))))
+
+(define (eval-path-root r s g parent)
+  (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print r))
+  (match-let
+    (((root e-r s-r) r))
 
     (define (eval-path-root-helper s)
         ;(debug-print "#~v: eval-path-root-helper ~v" (state->statei s) (user-print path-root))
         (match s
-          ((state («cons» _ (== e-r) _) (== κ-r))
-           (graph-eval e-r s g parent))
-          ((state («cons» _ _ (== e-r)) (== κ-r))
-           (graph-eval e-r s g parent))
+          ((== s-r)
+           (graph-eval e-r s-r g parent))
           ((state e κ)
            (match e
              ((«set-car!» _ e-id e-update)
-              (let ((d* (graph-eval e-id s g parent)))
-               (match d*
-                 ((state («cons» _ (== e-r) _) (== κ-r))
-                  (graph-eval e-update s g parent))
-                 (_ (eval-path-root-helper (predecessor s g))))))
+              (let ((r* (lookup-path-root e-id 'car s g parent)))
+                (if (equal? r r*)
+                    (graph-eval e-update s g parent)
+                    (eval-path-root-helper (predecessor s g)))))
              ((«set-cdr!» _ e-id e-update)
-              (let ((d* (graph-eval e-id s g parent)))
-               (match d*
-                 ((state («cons» _ _ (== e-r)) (== κ-r))
-                  (graph-eval e-update s g parent))
-                 (_ (eval-path-root-helper (predecessor s g))))))
+              (let ((r* (lookup-path-root e-id 'cdr s g parent)))
+                (if (equal? r r*)
+                    (graph-eval e-update s g parent)
+                    (eval-path-root-helper (predecessor s g)))))
              (_ ; TODO not all cases handled yet!
               (eval-path-root-helper (predecessor s g)))
              ))
           ))
 
     (let ((result (eval-path-root-helper (predecessor s g))))
-      (debug-print-out "#~v: eval-path-root ~a: ~v" (state->statei s) (user-print 'path-root) result)
-      result))
+      (debug-print-out "#~v: eval-path-root ~a: ~v" (state->statei s) (user-print r) result)
+      result)))
 
 (define (cont s g parent)
   ;(printf "cont e ~v κ ~v\n" e κ)
@@ -376,10 +344,7 @@
  (conc-eval
   (compile
 
-       '(let ((a (cons 0 1)))
-         (let ((b (cons 2 3)))
-           (let ((u (set-car! a b)))
-             a)))
+       p1
 
   )))
 
