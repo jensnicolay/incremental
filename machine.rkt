@@ -18,7 +18,6 @@
                                                    (define hash-proc (lambda (s rhash) (equal-hash-code (prim-name s))))
                                                    (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (prim-name s))))))
 (struct state (e κ) #:transparent)
-;(struct var-root (e κ) #:transparent)
 (struct root (e s) #:transparent)
 (struct system (graph end-state parent) #:transparent)
 (struct graph (fwd bwd initial) #:transparent
@@ -60,7 +59,7 @@
        (if b
            (eval-var-root x b s g parent)
            (eval (string->symbol x) ns))))
-    ((«lam» _ e-params e-body)
+    ((«lam» _ _ _)
      (clo e s))
     ((«quo» _ (cons _ _))
      s)
@@ -344,7 +343,7 @@
  (conc-eval
   (compile
 
-       p1
+       p3
 
   )))
 
@@ -356,7 +355,25 @@
     ;             (f h)))))
 
 
-(define p1 '(let ((z (cons 0 1))) 
+(define p1 '(let ((f (lambda (x)
+                 (lambda () 
+                      x))))
+        (let ((g (f 1)))
+            (let ((h (f 2)))
+                (g))))
+)                
+
+
+
+(define p2 '(let ((y 999)) (let ((x 123)) (let ((u (if x (set! y 456) (set! y 789)))) y))))
+
+(define p3 '(let ((x (cons 0 1)))
+                (let ((y x))
+                  (let ((u (set-cdr! y 9)))
+                    (cdr x))))
+)
+
+(define px '(let ((z (cons 0 1))) 
                  (let ((a (cons 2 3)))
                    (let ((b (cons 4 a))) 
                      (let ((c (cons 5 z)))
@@ -366,13 +383,6 @@
                              (car d))))))))
 )
 
-(define p2 '(let ((f (lambda (x)
-                 (lambda () 
-                      x))))
-        (let ((g (f 1)))
-            (let ((h (f 2)))
-                (g))))
-)                
 
   ; '(let ((x 0))
   ;   (let ((f (lambda (g)
