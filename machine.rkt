@@ -115,7 +115,7 @@
         ((«letrec» _ («id» _ (== x)) e-init _)
          (root e-init (state e-init κ))) ; successor state exists because of `step`
         ((«lam» _ (list xs ...) _) ; s evals body exp e
-         (let ((s* (predecessor (state e κ) g))) ; s* is application of compound
+         (let ((s* (predecessor s g))) ; s* is application of compound
           (match s*
             ((state («app» _ e-rator e-args) _)
              (let param-args-loop ((xs xs) (e-args e-args))
@@ -208,23 +208,27 @@
       result)))
 
 (define (cont s g parent)
-  ;(printf "cont e ~v κ ~v\n" e κ)
+  ;(debug-print-in "#~v: cont" (state->statei s))
 
   (define (cont-helper e κ)
     (let ((p (parent e)))
+      ;(debug-print "cont e ~v κ ~v p ~v" e κ p)
       (match p
         ((«let» _ _ (== e) e-body)
          (state e-body κ))
         ((«letrec» _ _ (== e) e-body)
          (state e-body κ))
         ((«lam» _ _ _) ;((«lam» _ _ (== e)) always holds because of parent
+         (debug-print "pred of #~v is ~v" (state->statei (state e κ)) (user-print (predecessor (state e κ) g)))
          (let ((s* (predecessor (state e κ) g)))
            (cont s* g parent)))
         (#f #f)
         (_ (cont-helper p κ))
         )))
+  (let ((s-kont (cont-helper (state-e s) (state-κ s))))
+    ;(debug-print-out "#~v: cont: ~v" (state->statei s) (user-print s-kont))
+    s-kont))
 
-  (cont-helper (state-e s) (state-κ s)))
    
   (define (step s g parent)
     (debug-print "\n#~v\nstep ~v" (state->statei s) s)
@@ -343,7 +347,7 @@
  (conc-eval
   (compile
 
-       p3
+       px
 
   )))
 
