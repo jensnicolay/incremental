@@ -106,7 +106,7 @@
     (let* ((e (state-e s))
            (κ (state-κ s))
            (pa (parent e)))
-      ;(printf "\tast-helper ~v e ~v pa ~v\n" x e pa)
+      ;(debug-print "#~v: ast-helper x ~v pa ~v" (state->statei s) x (user-print pa))
       (match pa
         ;((«let» _ _ (== e) _)
         ;(ast-helper (state pa κ)))
@@ -148,7 +148,7 @@
   (match-let (((root e-b s-b) b))
 
   (define (eval-var-root-helper s)
-      ;(debug-print "#~v: eval-var-root-helper #~v" (state->statei s) (state->statei s*))
+      ;(debug-print "#~v: eval-var-root-helper" (state->statei s))
       (match s
         ((== s-b)
          (graph-eval e-b s-b g parent))
@@ -169,12 +169,17 @@
     d)))
 
 (define (lookup-path-root e-id f s g parent)   
-  (let ((d (graph-eval e-id s g parent)))
-    (match* (d f)
-      (((state («cons» _ e-car _) _) 'car)
-       (root e-car d))
-      (((state («cons» _ _ e-cdr) _) 'cdr)
-       (root e-cdr d)))))
+  (debug-print-in "#~v: lookup-path-root ~a ~a" (state->statei s) (user-print e-id) f)
+  (let ((root 
+    (let ((d (graph-eval e-id s g parent)))
+      (match* (d f)
+        (((state («cons» _ e-car _) _) 'car)
+        (root e-car d))
+        (((state («cons» _ _ e-cdr) _) 'cdr)
+        (root e-cdr d))))))
+    (debug-print-out "#~v: lookup-path-root ~a ~a: ~a" (state->statei s) (user-print e-id) f (user-print root))
+    root))
+
 
 (define (eval-path-root r s g parent)
   (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print r))
@@ -219,7 +224,7 @@
         ((«letrec» _ _ (== e) e-body)
          (state e-body κ))
         ((«lam» _ _ _) ;((«lam» _ _ (== e)) always holds because of parent
-         (debug-print "pred of #~v is ~v" (state->statei (state e κ)) (user-print (predecessor (state e κ) g)))
+         ;(debug-print "pred of #~v is ~v" (state->statei (state e κ)) (user-print (predecessor (state e κ) g)))
          (let ((s* (predecessor (state e κ) g)))
            (cont s* g parent)))
         (#f #f)
@@ -347,7 +352,11 @@
  (conc-eval
   (compile
 
-       px
+       '(let ((x 3))
+          (let ((g (lambda (y) y)))
+            (let ((f (lambda () (g x))))
+              (f))))
+         
 
   )))
 
