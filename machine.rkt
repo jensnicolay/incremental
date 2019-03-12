@@ -7,18 +7,24 @@
 (define ns (make-base-namespace))
 
 ;;;;;;;;;;
+(define debug-print-in (make-parameter (lambda args #f)))
+(define debug-print-out (make-parameter (lambda args #f)))
+(define debug-print (make-parameter (lambda args #f)))
+;;;;;;;;;;
 
 (struct letk (x e ρ) #:transparent)
 (struct letreck (x e ρ) #:transparent)
-(struct clo (e s) #:transparent)
- ; #:property prop:custom-write (lambda (v p w?)
+
+(struct state (e κ) #:transparent)
+(struct root (e s) #:transparent)
+(struct obj (e s) #:transparent)
+; #:property prop:custom-write (lambda (v p w?)
   ;                               (fprintf p "<clo ~v>" (clo-e v))))
 (struct prim (name proc) #:methods gen:equal+hash ((define equal-proc (lambda (s1 s2 requal?)
                                                                         (equal? (prim-name s1) (prim-name s2))))
                                                    (define hash-proc (lambda (s rhash) (equal-hash-code (prim-name s))))
                                                    (define hash2-proc (lambda (s rhash) (equal-secondary-hash-code (prim-name s))))))
-(struct state (e κ) #:transparent)
-(struct root (e s) #:transparent)
+
 (struct system (graph end-state parent) #:transparent)
 (struct graph (fwd bwd initial) #:transparent
   #:property prop:custom-write (lambda (v p w?)
@@ -42,7 +48,7 @@
 
 
 (define (graph-eval e s g parent) ; general TODO: every fw movement should be restrained to previous path(s)
-  (debug-print-in "#~v: graph-eval ~v" (state->statei s) e)
+  ((debug-print-in) "#~v: graph-eval ~v" (state->statei s) e)
 
   ; assertion holds: e not id lam lit, s = <e', k>, then e = e'
   ; (when (and (not (or («id»? e) («lam»? e) («lit»? e)))
@@ -60,9 +66,7 @@
            (eval-var-root x b s g parent)
            (eval (string->symbol x) ns))))
     ((«lam» _ _ _)
-     (clo e s))
-    ((«quo» _ (cons _ _))
-     s)
+     (obj e s))
     ((«quo» _ d)
      d)
     ((«let» _ _ _ e-body)
@@ -86,7 +90,7 @@
               ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
               (apply proc d-rands)))))))
     ((«cons» _ _ _)
-      s)
+     (obj e s))
     ((«car» _ e-id)
      (let ((r (lookup-path-root e-id 'car s g parent)))
         (eval-path-root r s g parent)))
@@ -95,12 +99,12 @@
         (eval-path-root r s g parent)))
     )))
 
-    (debug-print-out "#~v: graph-eval ~v: ~v" (state->statei s) e (user-print d-result))
+    ((debug-print-out) "#~v: graph-eval ~v: ~v" (state->statei s) e (user-print d-result))
     d-result
     ))
 
 (define (lookup-var-root x s g parent)
-  (debug-print-in "#~v: lookup-var-root ~a" (state->statei s) x)
+  ((debug-print-in) "#~v: lookup-var-root ~a" (state->statei s) x)
 
   (define (ast-helper s)
     (let* ((e (state-e s))
@@ -121,8 +125,8 @@
              (let param-args-loop ((xs xs) (e-args e-args))
                (if (null? xs)
                    (let* ((d-clo (graph-eval e-rator s* g parent))
-                          (s** (clo-s d-clo))) ; s** is where closure was created
-                     (debug-print "found closure: ~v" d-clo)
+                          (s** (obj-s d-clo))) ; s** is where closure was created
+                     ((debug-print) "found closure: ~v" d-clo)
                      (ast-helper s**))
                    (let ((e-decl (car xs)))
                      (match e-decl
@@ -139,11 +143,11 @@
         )))
 
   (let ((r (ast-helper s)))
-    (debug-print-out "#~v: lookup-var-root ~a: ~a" (state->statei s) x (user-print r))
+    ((debug-print-out) "#~v: lookup-var-root ~a: ~a" (state->statei s) x (user-print r))
     r))
 
 (define (eval-var-root x b s g parent) ; the `x` param is optimization (see below)
-  (debug-print-in "#~v: eval-var-root ~a" (state->statei s) (user-print b))
+  ((debug-print-in) "#~v: eval-var-root ~a" (state->statei s) (user-print b))
 
   (match-let (((root e-b s-b) b))
 
@@ -165,24 +169,29 @@
           ))
 
   (let ((d (eval-var-root-helper (predecessor s g))))
-    (debug-print-out "#~v: eval-var-root ~a: ~a" (state->statei s) (user-print b) (user-print d))
+    ((debug-print-out) "#~v: eval-var-root ~a: ~a" (state->statei s) (user-print b) (user-print d))
     d)))
 
 (define (lookup-path-root e-id f s g parent)   
-  (debug-print-in "#~v: lookup-path-root ~a ~a" (state->statei s) (user-print e-id) f)
+  ((debug-print-in) "#~v: lookup-path-root ~a ~a" (state->statei s) (user-print e-id) f)
   (let ((root 
     (let ((d (graph-eval e-id s g parent)))
       (match* (d f)
-        (((state («cons» _ e-car _) _) 'car)
-        (root e-car d))
-        (((state («cons» _ _ e-cdr) _) 'cdr)
-        (root e-cdr d))))))
-    (debug-print-out "#~v: lookup-path-root ~a ~a: ~a" (state->statei s) (user-print e-id) f (user-print root))
+        (((obj («cons» _ e-car _) s-root) 'car)
+         (root e-car s-root))
+        (((obj («cons» _ _ e-cdr) s-root) 'cdr)
+         (root e-cdr s-root))
+        ; (((state («quo» _ (cons e-car _)) _) 'car)
+        ;  (root e-car d))
+        ; (((state («quo» _ (cons _ e-cdr)) _) 'cdr)
+        ;  (root e-cdr d))
+      ))))
+    ((debug-print-out) "#~v: lookup-path-root ~a ~a: ~a" (state->statei s) (user-print e-id) f (user-print root))
     root))
 
 
 (define (eval-path-root r s g parent)
-  (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print r))
+  ((debug-print-in) "#~v: eval-path-root ~a" (state->statei s) (user-print r))
   (match-let
     (((root e-r s-r) r))
 
@@ -209,7 +218,7 @@
           ))
 
     (let ((result (eval-path-root-helper (predecessor s g))))
-      (debug-print-out "#~v: eval-path-root ~a: ~v" (state->statei s) (user-print r) result)
+      ((debug-print-out) "#~v: eval-path-root ~a: ~v" (state->statei s) (user-print r) result)
       result)))
 
 (define (cont s g parent)
@@ -236,7 +245,7 @@
 
    
   (define (step s g parent)
-    (debug-print "\n#~v\nstep ~v" (state->statei s) s)
+    ((debug-print) "\n#~v\nstep ~v" (state->statei s) s)
     (match-let (((state e κ) s))
       (match e
         ((«let» _ _ init _)
@@ -249,7 +258,7 @@
       ((«app» _ e-rator e-rands)
        (let ((d-proc (graph-eval e-rator s g parent)))
          (match d-proc
-           ((clo («lam» _ _ e-body) _)
+           ((obj («lam» _ _ e-body) _)
             (let* ((κ* (count!))
                    (s* (state e-body κ*)))
               s*))
@@ -285,7 +294,7 @@
          (g (system-graph sys))
          (s-end (system-end-state sys))
          (parent (system-parent sys)))
-    (debug-print "\n\nEXPLORED with end state ~v" (state->statei s-end))
+    ((debug-print) "\n\nEXPLORED with end state ~v" (state->statei s-end))
     ;(generate-dot g "grapho")
     (graph-eval (state-e s-end) s-end g parent)))
 
@@ -293,23 +302,26 @@
   (evaluate e))
 
 ;;; OUTPUT STUFF
-
-(define debug-print-level 0)
-(define (debug-print-in . args)
-  (apply debug-print args)
-  (set! debug-print-level (add1 debug-print-level)))
-(define (debug-print-out . args)
-  (set! debug-print-level (sub1 debug-print-level))
-  (apply debug-print args))
-(define (debug-print . args)
-  (for ((i debug-print-level))
-    (display " "))
-  (apply printf args)
-  (newline))
+(define (parameterize-full-debug!)
+  (define debug-print-level 0)
+  (debug-print-in 
+    (lambda args
+      (apply (debug-print) args)
+      (set! debug-print-level (add1 debug-print-level))))
+  (debug-print-out
+    (lambda args
+      (apply (debug-print) args)
+      (set! debug-print-level (sub1 debug-print-level))))
+  (debug-print
+    (lambda args
+      (for ((i debug-print-level))
+        (display " "))
+      (apply printf args)
+      (newline))))
 
 (define (user-print d)
   (match d
-    ((clo e s) `(clo ,e ,(user-print s)))
+    ((obj e s) `(obj ,e ,(user-print s)))
     ((state e κ) (format "#~v" (state->statei d)))
     ((root e s) `(root ,e ,(user-print s)))
     (_ d)))
@@ -322,7 +334,7 @@
           (vector-set! v 0 i)
           (vector-set! v i x)
           i))))
-(define stateis (make-vector 2000))
+(define stateis (make-vector 4096))
 (define (state->statei q) (index stateis q))
 
 (define (state-repr s)
@@ -349,15 +361,10 @@
 ;;; TESTS
 
 (module+ main
+ (parameterize-full-debug!)
  (conc-eval
   (compile
-
-       '(let ((x 3))
-          (let ((g (lambda (y) y)))
-            (let ((f (lambda () (g x))))
-              (f))))
-         
-
+    '(let ((x '(a))) (let ((y '(b))) (let ((u (set! x y))) (car x))))
   )))
 
 ; find-lambda
@@ -367,6 +374,11 @@
     ;         (let ((h (lambda () x)))
     ;             (f h)))))
 
+; final Agda test (termination: how to reduce trace when if/app move fw?)
+      ;  '(let ((x 3))
+      ;     (let ((g (lambda (y) y)))
+      ;       (let ((f (lambda () (g x))))
+      ;         (f))))
 
 (define p1 '(let ((f (lambda (x)
                  (lambda () 

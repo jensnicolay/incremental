@@ -77,7 +77,7 @@
       ((? number? v) («lit» (tag!) v))
       ((? string? v)(«lit» (tag!) v))
       ((? char? v) («lit» (tag!) v))
-      (`(quote ,e) («quo» (tag!) e))
+      (`(quote ,e) (compile-quote e))
       (`(lambda ,x ,e) («lam» (tag!) (map compile2 x) (compile2 e)))
       (`(if ,ae ,e1 ,e2) («if» (tag!) (compile2 ae) (compile2 e1) (compile2 e2)))
       (`(let ((,x ,e0)) ,e1) («let» (tag!) (compile2 x) (compile2 e0) (compile2 e1)))
@@ -102,6 +102,12 @@
       ((? «app»?) e)
       ((? «lit»?) e)
       (_ (error "cannot handle expression" e))))
+  (define (compile-quote e)
+    (match e
+      ((cons e-car e-cdr) («cons» (tag!) (compile-quote e-car) (compile-quote e-cdr)))
+      ('() («lit» (tag!) e))
+      ((? symbol? x) («lit» (tag!) x))
+      (_ (compile2 e))))
   (compile2 e))
          
 (define (ae? e)
@@ -189,5 +195,9 @@
       (_ (error "cannot handle expression" e))))
   (f e (set)))
 
+(module+ main
+  (compile
+    ''(a b c)
+  ))
 
 
