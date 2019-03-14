@@ -196,8 +196,13 @@
   (f e (set)))
 
 (module+ main
-  (compile
-    ''(a b c)
-  ))
+
+  (free (compile (file->value "test/browse.scm")))
+
+  ; (compile
+  ;   ''(a b c)
+  ; )
+  
+)
 
 

@@ -3,7 +3,7 @@
 (require "general.rkt")
 (require "ast.rkt")
 
-(provide conc-eval)
+(provide conc-eval parameterize-full-debug!)
 (define ns (make-base-namespace))
 
 ;;;;;;;;;;
@@ -61,10 +61,10 @@
     ((«lit» _ d)
      d)
     ((«id» _ x)
-     (let ((b (lookup-var-root x s g parent)))
-       (if b
-           (eval-var-root x b s g parent)
-           (eval (string->symbol x) ns))))
+     (let ((r (lookup-var-root x s g parent)))
+      (if r ; by doing this check here, and not using e-var-root for unbound stuff, prims cannot be redefined
+          (eval-var-root x r s g parent)
+          (eval-primitive x))))
     ((«lam» _ _ _)
      (obj e s))
     ((«quo» _ d)
@@ -77,18 +77,15 @@
        (graph-eval (state-e s*) s* g parent)))
     ((«set!» _ _ _)
      '<unspecified>)
-    ((«app» _ («id» _ x) e-rands) ;TODO: ((lam ...) rands)
+    ((«app» _ e-rator _)
      (let ((κ (state-κ s)))
        (let ((s* (successor s g)))
          (match s*
            ((state (? (lambda (e) (body-expression? e parent)) e-body) _)
-            ;(printf "\t~v: compound app with body ~v\n" e e-body)
             (graph-eval e-body s* g parent))
            (_
-            (let ((d-rands (map (lambda (e-rand) (graph-eval e-rand s g parent)) e-rands))
-                  (proc (eval (string->symbol x) ns)))
-              ;(printf "~v: primitive app ~v on ~v\n" e x d-rands)
-              (apply proc d-rands)))))))
+            (let ((proc (graph-eval e-rator s g parent)))
+              (proc s g parent)))))))
     ((«cons» _ _ _)
      (obj e s))
     ((«car» _ e-id)
@@ -110,10 +107,8 @@
     (let* ((e (state-e s))
            (κ (state-κ s))
            (pa (parent e)))
-      ;(debug-print "#~v: ast-helper x ~v pa ~v" (state->statei s) x (user-print pa))
+      ;((debug-print) "#~v: ast-helper x ~v pa ~v" (state->statei s) x (user-print pa))
       (match pa
-        ;((«let» _ _ (== e) _)
-        ;(ast-helper (state pa κ)))
         ((«let» _ («id» _ (== x)) (and (not (== e)) e-init) _)
          (root e-init (state e-init κ))) ; successor state exists because of `step`
         ((«letrec» _ («id» _ (== x)) e-init _)
@@ -124,10 +119,12 @@
             ((state («app» _ e-rator e-args) _)
              (let param-args-loop ((xs xs) (e-args e-args))
                (if (null? xs)
-                   (let* ((d-clo (graph-eval e-rator s* g parent))
-                          (s** (obj-s d-clo))) ; s** is where closure was created
-                     ((debug-print) "found closure: ~v" d-clo)
-                     (ast-helper s**))
+                   (let ((d-clo (graph-eval e-rator s* g parent)))
+                     (match d-clo
+                       ((obj _ s**) ; s** is where closure was created
+                        ;((debug-print) "found closure: ~v" d-clo)
+                        (ast-helper s**))
+                       (_ #f))) ; prim (in prim?)
                    (let ((e-decl (car xs)))
                      (match e-decl
                         ((«id» _ (== x))
@@ -146,21 +143,21 @@
     ((debug-print-out) "#~v: lookup-var-root ~a: ~a" (state->statei s) x (user-print r))
     r))
 
-(define (eval-var-root x b s g parent) ; the `x` param is optimization (see below)
-  ((debug-print-in) "#~v: eval-var-root ~a" (state->statei s) (user-print b))
+(define (eval-var-root x r s g parent) ; the `x` param is optimization (see below)
+  ((debug-print-in) "#~v: eval-var-root ~a" (state->statei s) (user-print r))
 
-  (match-let (((root e-b s-b) b))
+  (match-let (((root e-r s-r) r)) 
 
   (define (eval-var-root-helper s)
-      ;(debug-print "#~v: eval-var-root-helper" (state->statei s))
+      ;((debug-print)"#~v: eval-var-root-helper" (state->statei s))
       (match s
-        ((== s-b)
-         (graph-eval e-b s-b g parent))
+        ((== s-r)
+         (graph-eval e-r s-r g parent))
         ((state e κ)
          (match e
             ((«set!» _ («id» _ (== x)) e-update) ; `== x` avoids looking up var-roots for different name (which can never match `b` anyway)
-              (let ((b* (lookup-var-root x s g parent)))
-                (if (equal? b b*)
+              (let ((r* (lookup-var-root x s g parent)))
+                (if (equal? r r*)
                     (graph-eval e-update s g parent)
                     (eval-var-root-helper (predecessor s g)))))
             (_
@@ -169,7 +166,7 @@
           ))
 
   (let ((d (eval-var-root-helper (predecessor s g))))
-    ((debug-print-out) "#~v: eval-var-root ~a: ~a" (state->statei s) (user-print b) (user-print d))
+    ((debug-print-out) "#~v: eval-var-root ~a: ~a" (state->statei s) (user-print r) (user-print d))
     d)))
 
 (define (lookup-path-root e-id f s g parent)   
@@ -181,10 +178,6 @@
          (root e-car s-root))
         (((obj («cons» _ _ e-cdr) s-root) 'cdr)
          (root e-cdr s-root))
-        ; (((state («quo» _ (cons e-car _)) _) 'car)
-        ;  (root e-car d))
-        ; (((state («quo» _ (cons _ e-cdr)) _) 'cdr)
-        ;  (root e-cdr d))
       ))))
     ((debug-print-out) "#~v: lookup-path-root ~a ~a: ~a" (state->statei s) (user-print e-id) f (user-print root))
     root))
@@ -222,30 +215,93 @@
       result)))
 
 (define (cont s g parent)
-  ;(debug-print-in "#~v: cont" (state->statei s))
+  ((debug-print-in) "#~v: cont" (state->statei s))
 
   (define (cont-helper e κ)
     (let ((p (parent e)))
-      ;(debug-print "cont e ~v κ ~v p ~v" e κ p)
+      ;((debug-print) "cont e ~v κ ~v p ~v" e κ p)
       (match p
         ((«let» _ _ (== e) e-body)
          (state e-body κ))
         ((«letrec» _ _ (== e) e-body)
          (state e-body κ))
         ((«lam» _ _ _) ;((«lam» _ _ (== e)) always holds because of parent
-         ;(debug-print "pred of #~v is ~v" (state->statei (state e κ)) (user-print (predecessor (state e κ) g)))
-         (let ((s* (predecessor (state e κ) g)))
-           (cont s* g parent)))
+         (if (parent p) ; for prims!
+             (begin
+              ;((debug-print) "pred of #~v is ~v" (state->statei (state e κ)) (user-print (predecessor (state e κ) g)))
+              (let ((s* (predecessor (state e κ) g)))
+                (cont s* g parent)))
+             #f)) ; 'unconnected' prim lam
         (#f #f)
         (_ (cont-helper p κ))
         )))
   (let ((s-kont (cont-helper (state-e s) (state-κ s))))
-    ;(debug-print-out "#~v: cont: ~v" (state->statei s) (user-print s-kont))
+    ((debug-print-out) "#~v: cont: ~v" (state->statei s) (user-print s-kont))
     s-kont))
 
-   
+  (define eval-primitive
+
+    (let ((Native-prims (hash))
+          (Compiled-prims (hash)))
+          
+      (define (glue-parents p1 p2)
+        (lambda (e)
+          (or (p1 e) (p2 e))))
+
+      (define (define-native-prim! x proc)
+        (set! Native-prims (hash-set Native-prims x proc)))
+
+      (define (define-compile-prim! x e-lam)
+        (set! Compiled-prims (hash-set Compiled-prims x (compile e-lam))))
+
+      (include "primitives.rkt")
+    
+      (lambda (x)    ; (eval (string->symbol x) ns)))
+        (let ((e-lam (hash-ref Compiled-prims x #f)))
+          (if e-lam
+            (lambda (s g parent)
+              (let* ((e-body («lam»-e e-lam))
+                     (s* (state e-body (count!)))
+                     (g* (graph (hash-set (graph-fwd g) s s*) (hash-set (graph-bwd g) s* s) #f))
+                     (parent* (make-parent e-lam))
+                     (parent** (glue-parents parent* parent))
+                     ;(_ ((debug-print-in) "#~v: explore prim ~v" (state->statei s) x))
+                     (sys (explore2 s* g* parent**))
+                     (g** (system-graph sys))
+                     (s*-end (system-end-state sys))
+                     ;(__ ((debug-print-out) "#~v: explore prim ~v: #~v" (state->statei s) x (state->statei s*-end)))
+                     (d-ret (graph-eval (state-e s*-end) s*-end g** parent**)))
+                d-ret))
+            (let ((proc (hash-ref Native-prims x #f)))
+              (if proc
+                  (lambda (s g parent)
+                    (match s
+                      ((state («app» _ _ e-rands) _)
+                      (let ((d-rands (map (lambda (e-rand) (graph-eval e-rand s g parent)) e-rands)))
+                        (apply proc d-rands)))))
+                  (error "unbound variable" x))))))))
+
+
+(define (explore2 s g parent)
+    
+  (define (add-transition! from to)
+    (set! g (graph (hash-set (graph-fwd g) from to) (hash-set (graph-bwd g) to from) #f)))
+  
+  (define (explore! s)
+    (let ((s* (step s g parent)))
+      (if s*
+          (begin
+            ;((debug-print) "TRANS prim ~v -> ~v" (state->statei s) (state->statei s*))
+            (add-transition! s s*)
+            (explore! s*))
+          s)))
+
+  (let ((s-end (explore! s)))
+    ((debug-print) "EXPLORED prim ~v -> ~v" (state->statei s) (state->statei s-end))
+    (system g s-end parent)))
+
   (define (step s g parent)
-    ((debug-print) "\n#~v\nstep ~v" (state->statei s) s)
+    ((debug-print) "#~v: step ~v" (state->statei s) s)
     (match-let (((state e κ) s))
       (match e
         ((«let» _ _ init _)
@@ -294,7 +350,7 @@
          (g (system-graph sys))
          (s-end (system-end-state sys))
          (parent (system-parent sys)))
-    ((debug-print) "\n\nEXPLORED with end state ~v" (state->statei s-end))
+    ((debug-print) "EXPLORED ~v -> ~v" (state->statei (graph-initial g)) (state->statei s-end))
     ;(generate-dot g "grapho")
     (graph-eval (state-e s-end) s-end g parent)))
 
@@ -310,8 +366,8 @@
       (set! debug-print-level (add1 debug-print-level))))
   (debug-print-out
     (lambda args
-      (apply (debug-print) args)
-      (set! debug-print-level (sub1 debug-print-level))))
+      (set! debug-print-level (sub1 debug-print-level))
+      (apply (debug-print) args)))
   (debug-print
     (lambda args
       (for ((i debug-print-level))
@@ -364,7 +420,7 @@
  (parameterize-full-debug!)
  (conc-eval
   (compile
-    '(let ((x '(a))) (let ((y '(b))) (let ((u (set! x y))) (car x))))
+      (file->value "test/collatz.scm")
   )))
 
 ; find-lambda

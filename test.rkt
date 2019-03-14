@@ -3,6 +3,8 @@
 (require "ast.rkt")
 (require "machine.rkt")
 
+;(parameterize-full-debug!)
+
 (define (test-machine e expected)
   (let ((result
             (with-handlers ((exn:fail?
