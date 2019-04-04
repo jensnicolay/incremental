@@ -1,69 +1,23 @@
 #lang racket
 (provide (all-defined-out))
 
-(struct «lit» (l v) #:transparent
-  #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "~a" («lit»-v v))))
-(struct «id» (l x) #:transparent
-  #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "~a" («id»-x v))))
+(struct «lit» (l v) #:transparent)
+(struct «id» (l x) #:transparent)
 (struct «quo» (l e) #:transparent)
-
-(struct «lam» (l x e) #:transparent
-  #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(lambda ~a ~a)" («lam»-x v) («lam»-e v))))
-(struct «app» (l ae aes) #:transparent
-  #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "~a" (cons («app»-ae v) («app»-aes v)))))
-
-(struct «let» (l x e0 e1) #:transparent
-    #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(let ((~a ~a)) ~a)" («let»-x v) («let»-e0 v) («let»-e1 v))))
-
-(struct «letrec» (l x e0 e1) #:transparent
-      #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(letrec ((~a ~a)) ~a)" («letrec»-x v) («letrec»-e0 v) («letrec»-e1 v))))
-
-(struct «if» (l ae e0 e1) #:transparent
-    #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(if ~a ~a ~a)" («if»-ae v) («if»-e0 v) («if»-e1 v))))
-
-(struct «set!» (l x ae) #:transparent
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(set! ~a ~a)" («set!»-x v) («set!»-ae v))))
-
-(struct «car» (l x) #:transparent
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(car ~a)" («car»-x v))))
-
-(struct «cdr» (l x) #:transparent 
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(cdr ~a)" («cdr»-x v))))
-
-(struct «set-car!» (l x ae) #:transparent
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(set-car! ~a ~a)" («set-car!»-x v) («set-car!»-ae v))))
-
-(struct «set-cdr!» (l x ae) #:transparent
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(set-cdr! ~a ~a)" («set-cdr!»-x v) («set-cdr!»-ae v))))
-
-(struct «cons» (l ae1 ae2) #:transparent
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(cons ~a ~a)" («cons»-ae1 v) («cons»-ae2 v))))
-
-(struct «vector-ref» (l x ae) #:transparent
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(vector-ref ~a ~a)" («vector-ref»-x v) («vector-ref»-ae v))))
-
-(struct «vector-set!» (l x ae1 ae2) #:transparent
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(vector-set! ~a ~a ~a)" («vector-set!»-x v) («vector-set!»-ae1 v) («vector-set!»-ae2 v))))
-
-(struct «make-vector» (l ae1 ae2) #:transparent
-        #:property prop:custom-write (lambda (v p w?)
-                                 (fprintf p "(make-vector ~a ~a)" («make-vector»-ae1 v) («make-vector»-ae2 v))))
-
+(struct «lam» (l x e) #:transparent)
+(struct «app» (l ae aes) #:transparent)
+(struct «let» (l x e0 e1) #:transparent)
+(struct «letrec» (l x e0 e1) #:transparent)
+(struct «if» (l ae e0 e1) #:transparent)
+(struct «set!» (l x ae) #:transparent)
+(struct «car» (l x) #:transparent)
+(struct «cdr» (l x) #:transparent) 
+(struct «set-car!» (l x ae) #:transparent)
+(struct «set-cdr!» (l x ae) #:transparent)
+(struct «cons» (l ae1 ae2) #:transparent)
+(struct «vector-ref» (l x ae) #:transparent)
+(struct «vector-set!» (l x ae1 ae2) #:transparent)
+(struct «make-vector» (l ae1 ae2) #:transparent)
 
 (define (compile e)
   (define l -1)
@@ -149,6 +103,27 @@
 ;              (let ((p (parent e (set-first cs))))
 ;                (or p (loop (set-rest cs)))))))))
 
+(define (ast->string e)
+  (match e
+    ((«id» _ x) x)
+    ((«lit» _ d) (~s d))
+    ((«lam» _ x e) (format "(lambda ~a ~a)" (map ast->string x) (ast->string e)))
+    ((«let» _ x e0 e1) (format "(let ((~a ~a)) ~a)" (ast->string x) (ast->string e0) (ast->string e1)))
+    ((«letrec» _ x e0 e1) (format "(letrec ((~a ~a)) ~a)" (ast->string x) (ast->string e0) (ast->string e1)))
+    ((«if» _ ae e0 e1) (format "(if ~a ~a ~a)" (ast->string ae) (ast->string e0) (ast->string e1)))
+    ((«car» _ x) (format "(car ~a)" (ast->string x)))
+    ((«cdr» _ x) (format "(cdr ~a)" (ast->string x)))
+    ((«set!» _ x ae) (format "(set! ~a ~a)" (ast->string x) (ast->string ae)))
+    ((«set-car!» _ x ae) (format "(set-car! ~a ~a)" (ast->string x) (ast->string ae)))
+    ((«set-cdr!» _ x ae) (format "(set-cdr! ~a ~a)" (ast->string x) (ast->string ae)))
+    ((«cons» _ ae1 ae2) (format "(cons ~a ~a)" (ast->string ae1) (ast->string ae2)))
+    ((«make-vector» _ ae1 ae2) (format "(make-vector ~a ~a)" (ast->string ae1) (ast->string ae2)))
+    ((«vector-ref» _ x ae) (format "(vector-ref ~a ~a)" (ast->string x) (ast->string ae)))
+    ((«vector-set!» _ x ae1 ae2) (format "(vector-set! ~a ~a ~a)" (ast->string x) (ast->string ae1) (ast->string ae2)))
+    ((«quo» _ e) (format "'~a" (ast->string e)))
+    ((«app» _ rator rands) (format "~a" (map ast->string (cons rator rands))))
+    (_ (error "cannot handle expression" e))))
+                                 
 
 (define (parent-map ast)
   (define (traverse-ast S W)
@@ -197,7 +172,12 @@
 
 (module+ main
 
-  (free (compile (file->value "test/browse.scm")))
+  (let ((ast
+    (compile '(let ((x 1)) x))
+        ))
+
+    (for-each (lambda (n) (printf "~v\n" n)) (nodes ast)))
+
 
   ; (compile
   ;   ''(a b c)
