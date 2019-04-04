@@ -241,15 +241,15 @@
 
   (define eval-primitive
 
-    (let (;(Native-prims (hash))
+    (let ((Native-prims (hash))
           (Compiled-prims (hash)))
           
       (define (glue-parents p1 p2)
         (lambda (e)
           (or (p1 e) (p2 e))))
 
-      ; (define (define-native-prim! x proc)
-      ;   (set! Native-prims (hash-set Native-prims x proc)))
+      (define (define-native-prim! x proc)
+        (set! Native-prims (hash-set Native-prims x proc)))
 
       (define (define-compile-prim! x e-lam)
         (set! Compiled-prims (hash-set Compiled-prims x (compile e-lam))))
@@ -272,14 +272,14 @@
                      ;(__ ((debug-print-out) "#~v: explore prim ~v: #~v" (state->statei s) x (state->statei s*-end)))
                      (d-ret (graph-eval (state-e s*-end) s*-end g** parent**)))
                 d-ret))
-            (let ((proc (eval (string->symbol x) ns)))
-              (lambda (s g parent)
-                (match s
-                  ((state («app» _ _ e-rands) _)
-                    (let ((d-rands (map (lambda (e-rand) (graph-eval e-rand s g parent)) e-rands)))
-                      (apply proc d-rands)))))))))))
-                  
-                  ; (error "unbound variable" x))))))))
+            (let ((proc (hash-ref Native-prims x #f)))
+              (if proc
+                  (lambda (s g parent)
+                    (match s
+                      ((state («app» _ _ e-rands) _)
+                      (let ((d-rands (map (lambda (e-rand) (graph-eval e-rand s g parent)) e-rands)))
+                        (apply proc d-rands)))))
+                  (error "unbound variable" x))))))))
 
 
 (define (explore2 s g parent)
