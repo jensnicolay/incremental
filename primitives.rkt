@@ -1,26 +1,34 @@
-(define-native-prim! "=" =)
-(define-native-prim! "zero?" zero?)
-(define-native-prim! "<" <)
-(define-native-prim! "<=" <=)
-(define-native-prim! ">" >)
-(define-native-prim! ">=" >=)
-(define-native-prim! "+" +)
-(define-native-prim! "-" -)
-(define-native-prim! "*" *)
-(define-native-prim! "/" /)
-(define-native-prim! "even?" even?)
-(define-native-prim! "odd?" odd?)
-(define-native-prim! "null?" null?)
-(define-native-prim! "eq?" equal?)
-(define-native-prim! "number->string" number->string)
-(define-native-prim! "symbol->string" symbol->string)
-(define-native-prim! "string->symbol" string->symbol)
-(define-native-prim! "not" not)
-(define-native-prim! "remainder" remainder)
-(define-native-prim! "string-ref" string-ref)
+(define-value-prim! "=" =)
+(define-value-prim! "zero?" zero?)
+(define-value-prim! "<" <)
+(define-value-prim! "<=" <=)
+(define-value-prim! ">" >)
+(define-value-prim! ">=" >=)
+(define-value-prim! "+" +)
+(define-value-prim! "-" -)
+(define-value-prim! "*" *)
+(define-value-prim! "/" /)
+(define-value-prim! "even?" even?)
+(define-value-prim! "odd?" odd?)
+(define-value-prim! "null?" null?)
+(define-value-prim! "eq?" equal?)
+(define-value-prim! "number->string" number->string)
+(define-value-prim! "symbol->string" symbol->string)
+(define-value-prim! "string->symbol" string->symbol)
+(define-value-prim! "not" not)
+(define-value-prim! "remainder" remainder)
+(define-value-prim! "string-ref" string-ref)
 
+(define-value-prim! "pair?"
+  (lambda (d-rand . _)
+    (match d-rand
+      ((obj («cons» _ _ _) _)
+        #t)
+      (_ #f))))
 
-;"list"
+(define-compile-prim! "list"
+  '(lambda (x)
+    (cons x 2)))
 
     ; (define-native-prim! "eqv?"
     ;   (lambda (_ __ d-rands)
@@ -48,11 +56,6 @@
     ;     (let ((a (alloc e-app κ)))
     ;       (store-alloc! a (α (cons (car d-rands) (cadr d-rands))))
     ;       (set (α (addr a))))))
-
-    ; (define-native-prim! "list"
-    ;   (lambda (e-app κ d-rands)
-    ;     (let ((e-rands («app»-es e-app)))
-    ;       (set (list-alloc-helper! d-rands e-rands κ)))))
 
     ; (define (list-alloc-helper! d-rands e-rands κ)
     ;   (if (null? d-rands)
@@ -90,12 +93,6 @@
     ;           (store-update! (addr-a a) (α (cons (car w) d)))))
     ;       (set (α 'undefined)))))
 
-    (define-native-prim! "pair?"
-      (lambda (d-rand . _)
-        (match d-rand
-          ((obj («cons» _ _ _) _)
-           #t)
-          (_ #f))))
 
     ; (define-native-prim! "make-vector"
     ;   (lambda (e-app κ d-rands)
@@ -182,6 +179,7 @@
     
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;    
     
+
     (define-compile-prim! "vector-copy"
       '(lambda (v)
          (let ((l (vector-length v)))

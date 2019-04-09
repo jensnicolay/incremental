@@ -31,6 +31,10 @@
 (test-machine '(let ((p (cons 1 2))) (let ((q p)) (eq? p q))) #t)
 (test-machine '(let ((p (cons 1 2))) (pair? p)) #t)
 (test-machine '(let ((p 123)) (pair? p)) #f)
+(test-machine '(list) '())
+(test-machine '(let ((l (list))) (eq? l '())) #t)
+(test-machine '(let ((l (list))) (null? l)) #t)
+
 
 
 (test-machine '(let ((p (cons 1 2))) (let ((q (cons 1 2))) (equal? p q))) #t)
@@ -38,8 +42,9 @@
 
 
 ;warmup
-(test-machine (file->value "test/fib.scm")        21)
-(test-machine (file->value "test/collatz.scm")    5)
+; (test-machine (file->value "test/fib.scm")        21)
+; (test-machine (file->value "test/collatz.scm")    5)
+
 ;(test-machine (file->value "test/browse.scm")     '<undefined>)
 ;(test-machine (file->value "test/churchnums.scm") #t)
             ; "classtree"

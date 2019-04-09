@@ -19,7 +19,7 @@
 (struct «vector-set!» (l x ae1 ae2) #:transparent)
 (struct «make-vector» (l ae1 ae2) #:transparent)
 
-(define (compile e)
+(define (make-compiler)
   (define l -1)
   (define (tag!)
     (set! l (add1 l))
@@ -62,7 +62,7 @@
       ('() («lit» (tag!) e))
       ((? symbol? x) («lit» (tag!) x))
       (_ (compile2 e))))
-  (compile2 e))
+  compile2)
          
 (define (ae? e)
   (match e
