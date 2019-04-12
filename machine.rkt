@@ -143,10 +143,17 @@
     d-result
     ))
 
+(define lvr (hash))
 (define (lookup-var-root x s)
   (and debug-print-in (debug-print-in "#~v: lookup-var-root ~a" (state->statei s) x))
 
   (define (ast-helper s)
+    (let ((key (cons x s)))
+      (hash-ref lvr key
+        (lambda ()
+          (ast-helper% s)))))
+
+  (define (ast-helper% s)
     (let* ((e (state-e s))
            (κ (state-κ s))
            (pa (parent e)))
@@ -193,7 +200,13 @@
          (ast-helper (state pa κ)))
         )))
 
-  (let ((r (ast-helper s)))
+  (let ((r
+    (let ((key (cons x s)))
+      (hash-ref lvr key
+        (lambda ()
+          (let ((r (ast-helper s)))
+            (set! lvr (hash-set lvr key r))
+            r))))))
     (and debug-print-out (debug-print-out "#~v: lookup-var-root ~a: ~a" (state->statei s) x (user-print r)))
     r))
 
