@@ -87,6 +87,7 @@
   (define (parent e)
     (hash-ref Parent e #f))
 
+  (define ecache (hash))
   (define (graph-eval e s) ; general TODO: every fw movement should be restrained to previous path(s)
     (and debug-print-in (debug-print-in "#~v: graph-eval ~v" (state->statei s) e))
 
@@ -97,48 +98,53 @@
   ;   (error "assertion failed!"))
 
   (let ((d-result
-  (match e
-    ((«lit» _ d)
-     d)
-    ((«id» _ x)
-     (let ((r (lookup-var-root x s)))
-      (if r ; by doing this check here, and not using e-var-root for unbound stuff, prims cannot be redefined
-          (eval-var-root x r s)
-          (eval-primitive x))))
-    ((«lam» _ _ _)
-     (obj e s))
-    ((«quo» _ d)
-     d)
-    ((«let» _ _ _ e-body)
-     (let ((s* (state e-body (state-κ s))))
-       (graph-eval e-body s*)))
-    ((«letrec» _ _ _ e-body)
-     (let ((s* (state e-body (state-κ s))))
-       (graph-eval e-body s*)))
-    ((«if» _ _ _ _)
-     (let ((s* (successor s g)))
-       (graph-eval (state-e s*) s*)))
-    ((«set!» _ _ _)
-     '<unspecified>)
-    ((«app» _ e-rator _)
-     (let ((κ (state-κ s)))
-       (let ((s* (successor s g)))
-         (match s*
-           ((state (? (lambda (e) (body-expression? e)) e-body) _)
-            (graph-eval e-body s*))
-           (_
-            (let ((proc (graph-eval e-rator s)))
-              (proc s))))))) ; only prim
-    ((«cons» _ _ _)
-     (obj e s))
-    ((«car» _ e-id)
-     (let ((r (lookup-path-root e-id 'car s)))
-        (eval-path-root r s)))
-    ((«cdr» _ e-id)
-     (let ((r (lookup-path-root e-id 'cdr s)))
-        (eval-path-root r s)))
-    )))
-
+    (let ((key (cons e s)))
+      (hash-ref ecache key
+        (lambda ()
+          (let ((d-result
+            (match e
+              ((«lit» _ d)
+              d)
+              ((«id» _ x)
+              (let ((r (lookup-var-root x s)))
+                (if r ; by doing this check here, and not using e-var-root for unbound stuff, prims cannot be redefined
+                    (eval-var-root x r s)
+                    (eval-primitive x))))
+              ((«lam» _ _ _)
+              (obj e s))
+              ((«quo» _ d)
+              d)
+              ((«let» _ _ _ e-body)
+              (let ((s* (state e-body (state-κ s))))
+                (graph-eval e-body s*)))
+              ((«letrec» _ _ _ e-body)
+              (let ((s* (state e-body (state-κ s))))
+                (graph-eval e-body s*)))
+              ((«if» _ _ _ _)
+              (let ((s* (successor s g)))
+                (graph-eval (state-e s*) s*)))
+              ((«set!» _ _ _)
+              '<unspecified>)
+              ((«app» _ e-rator _)
+              (let ((κ (state-κ s)))
+                (let ((s* (successor s g)))
+                  (match s*
+                    ((state (? (lambda (e) (body-expression? e)) e-body) _)
+                      (graph-eval e-body s*))
+                    (_
+                      (let ((proc (graph-eval e-rator s)))
+                        (proc s))))))) ; only prim
+              ((«cons» _ _ _)
+              (obj e s))
+              ((«car» _ e-id)
+              (let ((r (lookup-path-root e-id 'car s)))
+                  (eval-path-root r s)))
+              ((«cdr» _ e-id)
+              (let ((r (lookup-path-root e-id 'cdr s)))
+                  (eval-path-root r s)))
+              )))
+            (set! ecache (hash-set ecache key d-result))
+            d-result))))))
     (and debug-print-out (debug-print-out "#~v: graph-eval ~v: ~v" (state->statei s) e (user-print d-result)))
     d-result
     ))
@@ -205,7 +211,7 @@
       (hash-ref lvr key
         (lambda ()
           (let ((r (ast-helper s)))
-            (set! lvr (hash-set lvr key r))
+            ;(set! lvr (hash-set lvr key r))
             r))))))
     (and debug-print-out (debug-print-out "#~v: lookup-var-root ~a: ~a" (state->statei s) x (user-print r)))
     r))
@@ -236,21 +242,29 @@
     (and debug-print-out (debug-print-out "#~v: eval-var-root ~a: ~a" (state->statei s) (user-print r) (user-print d)))
     d)))
 
+(define lpr (hash))
 (define (lookup-path-root e-id f s)   
   (and debug-print-in (debug-print-in "#~v: lookup-path-root ~a ~a" (state->statei s) (user-print e-id) f))
-  (let ((root 
-    (let ((d (graph-eval e-id s)))
-      (match* (d f)
-        (((obj («cons» _ e-car _) s-root) 'car)
-         (root e-car s-root))
-        (((obj («cons» _ _ e-cdr) s-root) 'cdr)
-         (root e-cdr s-root))
-        ;;
-        ; (((obj (cons e-car _) s-root) 'car)
-        ;  (root e-car s-root))
-        ; (((obj (cons _ e-cdr) s-root) 'cdr)
-        ;  (root e-cdr s-root))
-      ))))
+
+  (let ((root
+    (let ((key (list e-id f s)))
+      (hash-ref lpr key
+        (lambda ()
+          (let ((r 
+            (let ((d (graph-eval e-id s)))
+              (match* (d f)
+                (((obj («cons» _ e-car _) s-root) 'car)
+                (root e-car s-root))
+                (((obj («cons» _ _ e-cdr) s-root) 'cdr)
+                (root e-cdr s-root))
+                ;;
+                ; (((obj (cons e-car _) s-root) 'car)
+                ;  (root e-car s-root))
+                ; (((obj (cons _ e-cdr) s-root) 'cdr)
+                ;  (root e-cdr s-root))
+              ))))
+            ;(set! lpr (hash-set lpr key r))
+            r))))))
     (and debug-print-out (debug-print-out "#~v: lookup-path-root ~a ~a: ~a" (state->statei s) (user-print e-id) (user-print root)))
     root))
 
@@ -438,66 +452,3 @@
   (compile
       (file->value "test/boyer.scm")
   )))
-
-; find-lambda
-    ;  '(let ((x 0))
-    ;     (let ((f (lambda (g) (g))))
-    ;       (let ((x 1))
-    ;         (let ((h (lambda () x)))
-    ;             (f h)))))
-
-; final Agda test (termination: how to reduce trace when if/app move fw?)
-      ;  '(let ((x 3))
-      ;     (let ((g (lambda (y) y)))
-      ;       (let ((f (lambda () (g x))))
-      ;         (f))))
-
-(define p1 '(let ((f (lambda (x)
-                 (lambda () 
-                      x))))
-        (let ((g (f 1)))
-            (let ((h (f 2)))
-                (g))))
-)                
-
-
-
-(define p2 '(let ((y 999)) (let ((x 123)) (let ((u (if x (set! y 456) (set! y 789)))) y))))
-
-(define p3 '(let ((x (cons 0 1)))
-                (let ((y x))
-                  (let ((u (set-cdr! y 9)))
-                    (cdr x))))
-)
-
-(define px '(let ((z (cons 0 1))) 
-                 (let ((a (cons 2 3)))
-                   (let ((b (cons 4 a))) 
-                     (let ((c (cons 5 z)))
-                       (let ((u (set! b c)))
-                         (let ((d (cdr b)))
-                           (let ((v (set-car! z 9)))
-                             (car d))))))))
-)
-
-
-  ; '(let ((x 0))
-  ;   (let ((f (lambda (g)
-  ;               g)))
-  ;     (let ((a (lambda () x)))
-  ;       (let ((b (lambda () 1)))
-  ;           (let ((fa (f a)))
-  ;             (let ((fb (f b)))
-  ;               (fa)))))))
-
-                      
-(define p-let-rule '(let ((f (lambda (x) x))) (let ((v (f 999))) v)))
-           
-
-;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
-;;;; THEREFORE: we only allow aes as update exps
-;;;(test '(let ((x 123)) (let ((y (set! x (set! x 456)))) x)) 'undefined)
-;;;(test '(let ((x 123)) (let ((y (set! x (let ((u (set! x 456))) 789)))) x)) 789)
-
-;;; SCHEME ERROR when setting before init
-;;; (test '(letrec ((x (let ((u (set! x 123))) 456))) x) 456)

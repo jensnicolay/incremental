@@ -35,6 +35,7 @@
 (define-value-prim! "%random" (lambda (n) (if (zero? n) 0 (random n))))
 (define-value-prim! "log" log)
 (define-value-prim! "ceiling" ceiling)
+(define-value-prim! "quotient" quotient)
 
 (define-value-prim! "pair?"
   (lambda (d-rand . _)

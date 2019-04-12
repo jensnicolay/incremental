@@ -376,6 +376,52 @@
 ;               1) DOESN'T WORK in regular Scheme AND graph-eval (since eval-binding starts lookup in pred state) 
 
 
+; specific, illustrative, tests
+; find-lambda
+    ;  '(let ((x 0))
+    ;     (let ((f (lambda (g) (g))))
+    ;       (let ((x 1))
+    ;         (let ((h (lambda () x)))
+    ;             (f h)))))
+;let-rule    
+(test-machine '(let ((f (lambda (x) x))) (let ((v (f 999))) v)) 999)
+; final Agda test (termination: how to reduce trace when if/app move fw?)
+      ;  '(let ((x 3))
+      ;     (let ((g (lambda (y) y)))
+      ;       (let ((f (lambda () (g x))))
+      ;         (f))))
+; p1 (from a paper, once...)
+(test-machine '(let ((f (lambda (x)
+                 (lambda () 
+                      x))))
+        (let ((g (f 1)))
+            (let ((h (f 2)))
+                (g)))) 1)
+; p2
+(test-machine '(let ((y 999)) (let ((x 123)) (let ((u (if x (set! y 456) (set! y 789)))) y))) 456)
+; p3
+(test-machine '(let ((x (cons 0 1)))
+                (let ((y x))
+                  (let ((u (set-cdr! y 9)))
+                    (cdr x)))) 9)
+; px
+(test-machine '(let ((z (cons 0 1))) 
+                 (let ((a (cons 2 3)))
+                   (let ((b (cons 4 a))) 
+                     (let ((c (cons 5 z)))
+                       (let ((u (set! b c)))
+                         (let ((d (cdr b)))
+                           (let ((v (set-car! z 9)))
+                             (car d)))))))) 9)
+                
+;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
+;;;; THEREFORE: we only allow aes as update exps
+;;;(test '(let ((x 123)) (let ((y (set! x (set! x 456)))) x)) 'undefined)
+;;;(test '(let ((x 123)) (let ((y (set! x (let ((u (set! x 456))) 789)))) x)) 789)
+
+;;; SCHEME ERROR when setting before init
+;;; (test '(letrec ((x (let ((u (set! x 123))) 456))) x) 456)
+
 ; 'real' programs
 (test-machine (file->value "test/fac.scm") 40320)
 (test-machine (file->value "test/fib.scm") 21)
@@ -384,5 +430,3 @@
 (define end-time (current-milliseconds))
 
 (printf "~v ms\n" (- end-time start-time))
-                  
-                                                        

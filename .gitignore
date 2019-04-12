@@ -8,3 +8,4 @@
 *.scm~
 
 \.vscode
+deploy.sh
