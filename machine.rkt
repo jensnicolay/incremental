@@ -364,12 +364,12 @@
   (define debug-print-level 0)
   (set! debug-print-in 
     (lambda args
-      (apply (debug-print) args)
+      (apply debug-print args)
       (set! debug-print-level (add1 debug-print-level))))
   (set! debug-print-out
     (lambda args
       (set! debug-print-level (sub1 debug-print-level))
-      (apply (debug-print) args)))
+      (apply debug-print args)))
   (set! debug-print
     (lambda args
       (for ((i debug-print-level))
@@ -419,7 +419,7 @@
 ;;; TESTS
 
 (module+ main
- ;(parameterize-full-debug!)
+ (parameterize-full-debug!)
  (conc-eval
   (compile
       p1
