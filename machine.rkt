@@ -450,5 +450,5 @@
  ;(parameterize-full-debug!)
  (conc-eval
   (compile
-      (file->value "test/boyer.scm")
+      (file->value "test/primtest.scm")
   )))
