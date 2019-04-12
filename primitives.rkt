@@ -26,9 +26,14 @@
         #t)
       (_ #f))))
 
-(define-compile-prim! "list"
-  '(lambda (x)
-    (cons x 2)))
+(define-value-prim! "display"
+  (lambda d-rands
+    (printf "EXPLORE: ~v\n" d-rands)
+    '<unspecified>))    
+
+
+ (define-compile-prim! "list"
+   '(lambda x x))
 
     ; (define-native-prim! "eqv?"
     ;   (lambda (_ __ d-rands)
@@ -44,12 +49,7 @@
   
     ; (define-native-prim! "error"
     ;   (lambda _ (set)))
-    
-    ; (define-native-prim! "display"
-    ;   (lambda (_ __ d-rands)
-    ;     (printf "~v\n" d-rands)
-    ;     (set (α 'undefined))))    
-    
+        
     
     ; (define-native-prim! "cons"
     ;   (lambda (e-app κ d-rands)

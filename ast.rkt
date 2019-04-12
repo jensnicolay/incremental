@@ -19,6 +19,28 @@
 (struct «vector-set!» (l x ae1 ae2) #:transparent)
 (struct «make-vector» (l ae1 ae2) #:transparent)
 
+(define (ast-label e)
+  (match e
+    ((«id» l _) l)
+    ((«lit» l _) l)
+    ((«lam» l _ _) l)
+    ((«let» l _ _ _) l)
+    ((«letrec» l _ _ _) l)
+    ((«if» l _ _ _) l)
+    ((«car» l _) l)
+    ((«cdr» l _) l)
+    ((«set!» l _ _) l)
+    ((«set-car!» l _ _) l)
+    ((«set-cdr!» l _ _) l)
+    ((«cons» l _ _) l)
+    ((«make-vector» l _ _) l)
+    ((«vector-ref» l _ _) l)
+    ((«vector-set!» l _ _ _) l)
+    ((«quo» l _) l)
+    ((«app» l _ _) l)
+    (_ (error "ast-label: cannot handle expression" e))))
+
+
 (define (make-compiler)
   (define l -1)
   (define (tag!)
@@ -31,8 +53,9 @@
       ((? number? v) («lit» (tag!) v))
       ((? string? v)(«lit» (tag!) v))
       ((? char? v) («lit» (tag!) v))
+      ((? null? v) '())
       (`(quote ,e) (compile-quote e))
-      (`(lambda ,x ,e) («lam» (tag!) (map compile2 x) (compile2 e)))
+      (`(lambda ,x ,e) («lam» (tag!) (compile-params x) (compile2 e)))
       (`(if ,ae ,e1 ,e2) («if» (tag!) (compile2 ae) (compile2 e1) (compile2 e2)))
       (`(let ((,x ,e0)) ,e1) («let» (tag!) (compile2 x) (compile2 e0) (compile2 e1)))
       (`(letrec ((,x ,e0)) ,e1) («letrec» (tag!) (compile2 x) (compile2 e0) (compile2 e1)))
@@ -55,13 +78,17 @@
       ((? «quo»?) e)
       ((? «app»?) e)
       ((? «lit»?) e)
-      (_ (error "cannot handle expression" e))))
+      (_ (error "compile: cannot handle expression" e))))
   (define (compile-quote e)
     (match e
       ((cons e-car e-cdr) («cons» (tag!) (compile-quote e-car) (compile-quote e-cdr)))
       ('() («lit» (tag!) e))
       ((? symbol? x) («lit» (tag!) x))
       (_ (compile2 e))))
+  (define (compile-params es)
+    (match es
+      ((cons e-car e-cdr) (cons (compile2 e-car) (compile-params e-cdr)))
+      (_ (compile2 es))))
   compile2)
          
 (define (ae? e)
@@ -76,7 +103,9 @@
   (match e
     ((«id» _ _) (set))
     ((«lit» _ _) (set))
-    ((«lam» _ x e) (set-add (list->set x) e))
+    ((«lam» _ (list e-params ...) e-body) (set-add (list->set e-params) e-body))
+    ((«lam» _ (list-rest e-params ... e-param) e-body) (set-add (set-add (list->set e-params) e-param) e-body))
+    ((«lam» _ (? «id»? e-param) e-body) (set e-param e-body))
     ((«let» _ x e0 e1) (set x e0 e1))
     ((«letrec» _ x e0 e1) (set x e0 e1))
     ((«if» _ ae e1 e2) (set ae e1 e2))
@@ -91,7 +120,7 @@
     ((«vector-set!» _ x ae1 ae2) (set x ae1 ae2))
     ((«quo» _ _) (set))
     ((«app» _ rator rands) (set-add (list->set rands) rator))
-    (_ (error "cannot handle expression" e))))
+    (_ (error "children: cannot handle expression" e))))
 
 ;(define (parent e ast)
 ;  (let ((cs (children ast)))
@@ -107,7 +136,7 @@
   (match e
     ((«id» _ x) x)
     ((«lit» _ d) (~s d))
-    ((«lam» _ x e) (format "(lambda ~a ~a)" (map ast->string x) (ast->string e)))
+    ((«lam» _ x e) (format "(lambda ~a ~a)" (ast->string x) (ast->string e)))
     ((«let» _ x e0 e1) (format "(let ((~a ~a)) ~a)" (ast->string x) (ast->string e0) (ast->string e1)))
     ((«letrec» _ x e0 e1) (format "(letrec ((~a ~a)) ~a)" (ast->string x) (ast->string e0) (ast->string e1)))
     ((«if» _ ae e0 e1) (format "(if ~a ~a ~a)" (ast->string ae) (ast->string e0) (ast->string e1)))
@@ -122,7 +151,9 @@
     ((«vector-set!» _ x ae1 ae2) (format "(vector-set! ~a ~a ~a)" (ast->string x) (ast->string ae1) (ast->string ae2)))
     ((«quo» _ e) (format "'~a" (ast->string e)))
     ((«app» _ rator rands) (format "~a" (map ast->string (cons rator rands))))
-    (_ (error "cannot handle expression" e))))
+    ((cons e0 e1) (cons (ast->string e0) (ast->string e1)))
+    ('() "")
+    (_ (error "ast->string: cannot handle expression" e))))
                                  
 
 (define (parent-map ast)
@@ -172,11 +203,13 @@
 
 (module+ main
 
+  (define compile (make-compiler))
+
   (let ((ast
-    (compile '(let ((x 1)) x))
+    (compile '(let ((f (lambda () (- 5 3)))) (f)))
         ))
 
-    (for-each (lambda (n) (printf "~v\n" n)) (nodes ast)))
+    (for-each (lambda (n) (printf "~v\n" (ast->string n))) (nodes ast)))
 
 
   ; (compile
