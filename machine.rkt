@@ -5,6 +5,7 @@
 
 (provide compile conc-eval parameterize-full-debug!)
 (define ns (make-base-namespace))
+(random-seed 111)
 
 ;;;;;;;;;;
 (define debug-print-in #f)
@@ -419,11 +420,10 @@
 ;;; TESTS
 
 (module+ main
- (parameterize-full-debug!)
+ ;(parameterize-full-debug!)
  (conc-eval
   (compile
-      p1
-      ;(file->value "test/mazefun.scm")
+      (file->value "test/boyer.scm")
   )))
 
 ; find-lambda
