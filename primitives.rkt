@@ -57,6 +57,11 @@
     (printf "EXPLORE: \n")
     '<unspecified>))
 
+; (define-value-prim! "error"
+;   (lambda d-rands
+;     (error "ERROR" d-rands)
+;     '<unspecified>))
+
 (define-value-prim! "vector-length"
   (lambda (d-rand)
     (match d-rand
@@ -430,3 +435,30 @@
                                         (let ((_ (vector-set! v i a)))
                                           v))))))))))
            (down lst 0))))
+
+
+    (define-compile-prim! "tostring"
+      '(lambda (l)
+  (let ((uu (null? l)))
+    (if uu
+       "()"
+       (let ((pp (pair? l)))
+         (if pp
+             (let ((a (car l)))
+               (let ((d (cdr l)))
+                 (let ((as (tostring a)))
+                   (let ((ds (tostring d)))
+                     (string-append "(" as " . " ds ")")))))
+           (let ((nn (number? l)))
+             (if nn
+                 (number->string l)
+                 (let ((ss (symbol? l)))
+                   (if ss
+                       (symbol->string l)
+                       l))))))))) ; assume string
+    )
+
+; (define-compile-prim! "assert"
+;   '(lambda (v)
+;     (let ((a (eq? v #t)))
+;       (if a '<unspecified> (error "assertion failed, got" v)))))

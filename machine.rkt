@@ -4,7 +4,7 @@
 (require "ast.rkt")
 
 (provide compile conc-eval parameterize-full-debug!)
-(define ns (make-base-namespace))
+;(define ns (make-base-namespace))
 (random-seed 111)
 
 ;;;;;;;;;;
@@ -471,5 +471,5 @@
  ;(parameterize-full-debug!)
  (conc-eval
   (compile
-      (file->value "test/browse.scm")
+      `(let ((result ,(file->value "test/matrix.scm"))) (tostring result))
   )))

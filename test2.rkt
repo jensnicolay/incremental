@@ -1,5 +1,7 @@
 #lang racket
 
+; more extensive tests involving (more) primitives and checking results of benchmark programs
+
 (require "ast.rkt")
 (require "machine.rkt")
 
@@ -17,7 +19,7 @@
 
 (define start-time (current-milliseconds))
 
-;support
+; support (prims etc)
 (test-machine '(number->string 123) "123")
 (test-machine '(= 0 0) #t)
 (test-machine '(= 0 1) #f)
@@ -49,11 +51,11 @@
 (test-machine (file->value "test/classtree.scm") #f)
 (test-machine (file->value "test/dderiv.scm") #t)
 (test-machine (file->value "test/deriv.scm") #t)
-;(test-machine (file->value "test/destruc.scm") ???) ; OUTPUT
+(test-machine `(let ((result ,(file->value "test/destruc.scm"))) (tostring result)) "((() . ()) . ((1 . ()) . ((1 . (() . ())) . ((1 . (() . ())) . ((1 . (() . ())) . ((1 . (() . ())) . ((1 . (() . ())) . ((1 . (() . ())) . ((1 . (() . ())) . ((1 . (() . (() . (() . ())))) . ()))))))))))")
 (test-machine (file->value "test/fannkuch.scm") 4)
 ;(test-machine (file->value "test/graphs.scm") 596) ; H-O cons
 (test-machine (file->value "test/grid.scm") #t)
-;(test-machine (file->value "test/matrix.scm") ???) ; output: (mcons 215 (mcons 960 (mcons 1220 1775)))
+(test-machine `(let ((result ,(file->value "test/matrix.scm"))) (tostring result)) "(215 . (960 . (1220 . 1775)))")
 ;(test-machine (file->value "test/mazefun.scm") #t) ; TOO LONG
 ;(test-machine (file->value "test/mceval.scm") 2) ; TOO LONG
 (test-machine (file->value "test/partialsums.scm") 77030060483083029083/96845140757687397075)
