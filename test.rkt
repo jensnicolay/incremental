@@ -359,6 +359,22 @@
 (test-machine '(let ((x '(a))) (let ((u (set-cdr! x 'b))) (cdr x))) 'b)
 (test-machine '(let ((x '(a))) (let ((u (set-cdr! x 'b))) (car x))) 'a)
 
+; vectors
+(test-machine '(let ((v (make-vector 10 'x))) (vector-ref v 3)) 'x)
+(test-machine '(let ((v (make-vector 10 'x))) (let ((u (vector-set! v 3 'y))) (vector-ref v 3))) 'y)
+(test-machine '(let ((v (make-vector 10 'x))) (let ((u (vector-set! v 9 'y))) (vector-ref v 3))) 'x)
+(test-machine '(let ((v (make-vector 10 'x))) (let ((u (vector-set! v 3 'y))) (vector-ref v 9))) 'x)
+(test-machine '(let ((p (cons 1 2)))
+  (let ((v (make-vector 10 p)))
+    (let ((u (set-cdr! p 9)))
+      (let ((e (vector-ref v 3)))
+        (cdr e))))) 9)
+(test-machine '(let ((v (make-vector 10 'x))) (let ((i 3)) (vector-ref v i))) 'x)
+(test-machine '(let ((v (make-vector 10 'x))) (let ((i 3)) (let ((u (vector-set! v i 'y))) (vector-ref v i)))) 'y)
+(test-machine '(let ((i 10)) (let ((v (make-vector i 'x))) (vector-ref v 3))) 'x)
+(test-machine '(let ((v (make-vector 10 'x))) (vector-length v)) 10)
+(test-machine '(let ((i 10)) (let ((v (make-vector i 'x))) (vector-length v))) 10)
+; TODO out of bounds stuff
 
 ; lazy
 (test-machine '(let ((try (lambda (a b)

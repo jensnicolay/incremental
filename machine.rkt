@@ -89,7 +89,7 @@
 
   (define ecache (hash))
   (define (graph-eval e s) ; general TODO: every fw movement should be restrained to previous path(s)
-    (and debug-print-in (debug-print-in "#~v: graph-eval ~v" (state->statei s) e))
+    (and debug-print-in (debug-print-in "#~v: graph-eval ~v" (state->statei s) (ast->string e)))
 
   ; assertion holds: e not id lam lit, s = <e', k>, then e = e'
   ; (when (and (not (or («id»? e) («lam»? e) («lit»? e)))
@@ -135,17 +135,23 @@
                       (let ((proc (graph-eval e-rator s)))
                         (proc s))))))) ; only prim
               ((«cons» _ _ _)
-              (obj e s))
+                (obj e s))
               ((«car» _ e-id)
-              (let ((r (lookup-path-root e-id 'car s)))
-                  (eval-path-root r s)))
+                (let ((r (lookup-path-root e-id 'car s)))
+                    (eval-path-root r s)))
               ((«cdr» _ e-id)
-              (let ((r (lookup-path-root e-id 'cdr s)))
-                  (eval-path-root r s)))
+                (let ((r (lookup-path-root e-id 'cdr s)))
+                    (eval-path-root r s)))
+              ((«make-vector» _ _ _)
+                (obj e s))
+              ((«vector-ref» _ e-id e-index)
+                (let ((d-index (graph-eval e-index s)))
+                  (let ((r (lookup-path-root e-id d-index s)))
+                      (eval-path-root r s))))
               )))
             (set! ecache (hash-set ecache key d-result))
             d-result))))))
-    (and debug-print-out (debug-print-out "#~v: graph-eval ~v: ~v" (state->statei s) e (user-print d-result)))
+    (and debug-print-out (debug-print-out "#~v: graph-eval ~v: ~a" (state->statei s) (ast->string e) (user-print d-result)))
     d-result
     ))
 
@@ -218,7 +224,7 @@
 
 (define (eval-var-root x r s) ; the `x` param is optimization (see below)
   (and debug-print-in (debug-print-in "#~v: eval-var-root ~a" (state->statei s) (user-print r)))
-
+  
   (match-let (((root e-r s-r) r)) 
 
   (define (eval-var-root-helper s)
@@ -244,7 +250,7 @@
 
 (define lpr (hash))
 (define (lookup-path-root e-id f s)   
-  (and debug-print-in (debug-print-in "#~v: lookup-path-root ~a ~a" (state->statei s) (user-print e-id) f))
+  (and debug-print-in (debug-print-in "#~v: lookup-path-root ~a ~a" (state->statei s) (ast->string e-id) f))
 
   (let ((root
     (let ((key (list e-id f s)))
@@ -258,6 +264,8 @@
                 (((obj («cons» _ _ e-cdr) s-root) 'cdr)
                 (root e-cdr s-root))
                 ;;
+                (((obj («make-vector» _ e-size e) s-root) e-index)
+                (root (cons e f) s-root))
                 ; (((obj (cons e-car _) s-root) 'car)
                 ;  (root e-car s-root))
                 ; (((obj (cons _ e-cdr) s-root) 'cdr)
@@ -265,20 +273,23 @@
               ))))
             ;(set! lpr (hash-set lpr key r))
             r))))))
-    (and debug-print-out (debug-print-out "#~v: lookup-path-root ~a ~a: ~a" (state->statei s) (user-print e-id) (user-print root)))
+    (and debug-print-out (debug-print-out "#~v: lookup-path-root ~a ~a: ~a" (state->statei s) (ast->string e-id) f (user-print root)))
     root))
 
 
-(define (eval-path-root r s)
+(define (eval-path-root r s) ; whart if we keep field-name (quicker lookup distinction)
   (and debug-print-in (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print r)))
-  (match-let
-    (((root e-r s-r) r))
+  
+  (let
+    ((s-r (root-s r)))
 
     (define (eval-path-root-helper s)
-        ;(debug-print "#~v: eval-path-root-helper ~v" (state->statei s) (user-print path-root))
+        (and debug-print (debug-print "#~v: eval-path-root-helper" (state->statei s)))
         (match s
           ((== s-r)
-           (graph-eval e-r s-r))
+            (match r
+              ((root (cons e-r f) s-r) (graph-eval e-r s-r))
+              ((root e-r s-r) (graph-eval e-r s-r))))
           ((state e κ)
            (match e
              ((«set-car!» _ e-id e-update)
@@ -291,6 +302,12 @@
                 (if (equal? r r*)
                     (graph-eval e-update s)
                     (eval-path-root-helper (predecessor s g)))))
+             ((«vector-set!» _ e-id e-index e-update)
+              (let ((d-index (graph-eval e-index s))) ; could be used to avoid looking up path root (if index ≠)
+                (let ((r* (lookup-path-root e-id d-index s)))
+                  (if (equal? r r*)
+                      (graph-eval e-update s)
+                      (eval-path-root-helper (predecessor s g))))))
              (_ ; TODO not all cases handled yet!
               (eval-path-root-helper (predecessor s g)))
              ))
@@ -322,7 +339,7 @@
           (_ (cont-helper p κ))
           )))
     (let ((s-kont (cont-helper (state-e s) (state-κ s))))
-      (and debug-print-out (debug-print-out "#~v: cont: ~v" (state->statei s) (user-print s-kont)))
+      (and debug-print-out (debug-print-out "#~v: cont: ~a" (state->statei s) (user-print s-kont)))
       s-kont))
 
 (define (eval-primitive x)
@@ -340,26 +357,29 @@
 
   (define (step s)
     (and debug-print (debug-print "#~v: step ~a" (state->statei s) (ast->string (state-e s))))
-    (match-let (((state e κ) s))
-      (match e
-        ((«let» _ _ init _)
-         (state init κ))
-        ((«letrec» _ _ init _)
-         (state init κ))
-        ((«if» _ e-cond e-then e-else)
-        (let ((d-cond (graph-eval e-cond s)))
-          (state (if d-cond e-then e-else) κ)))
-        ((«app» _ e-rator e-rands)
-        (let ((d-proc (graph-eval e-rator s)))
-          (match d-proc
-            ((obj («lam» _ _ e-body) _)
-              (let* ((κ* (count!))
-                    (s* (state e-body κ*)))
-                s*))
-            ((? procedure?)
-              (cont s)))))
-        (_ (cont s))
-      )))
+    (let ((s*
+        (match-let (((state e κ) s))
+          (match e
+            ((«let» _ _ init _)
+            (state init κ))
+            ((«letrec» _ _ init _)
+            (state init κ))
+            ((«if» _ e-cond e-then e-else)
+            (let ((d-cond (graph-eval e-cond s)))
+              (state (if d-cond e-then e-else) κ)))
+            ((«app» _ e-rator e-rands)
+            (let ((d-proc (graph-eval e-rator s)))
+              (match d-proc
+                ((obj («lam» _ _ e-body) _)
+                  (let* ((κ* (count!))
+                        (s* (state e-body κ*)))
+                    s*))
+                ((? procedure?)
+                  (cont s)))))
+            (_ (cont s))
+          ))))
+    (and debug-print (debug-print "#~v: step: ~a" (state->statei s) (user-print s*)))
+    s*))
 
   (define (explore! s)
     (let ((s* (step s)))
@@ -372,7 +392,7 @@
 
   (define s-end (explore! s0))
 
-  (and debug-print (debug-print "EXPLORED ~v -> ~v" (state->statei (graph-initial g)) (state->statei s-end)))
+  (and debug-print (debug-print "EXPLORED ~v -> ~a" (state->statei s0) (user-print s-end)))
 
   (define (dispatcher msg)
     (match msg
@@ -407,9 +427,10 @@
 
 (define (user-print d)
   (match d
-    ((obj e s) (format "(obj ~v ~a)" e (user-print s)))
+    ((obj e s) (format "(obj ~a ~a)" (ast->string e) (user-print s)))
     ((state e κ) (format "#~v" (state->statei d)))
-    ((root e s) (format "(root ~v ~a)" e (user-print s)))
+    ((root (cons e f) s) (format "(root (~a ~a) ~a)"(ast->string e) f (user-print s)))
+    ((root e s) (format "(root ~a ~a)"(ast->string e) (user-print s)))
     (_ d)))
 
 (define (index v x)
@@ -450,5 +471,5 @@
  ;(parameterize-full-debug!)
  (conc-eval
   (compile
-      (file->value "test/primtest.scm")
+      (file->value "test/browse.scm")
   )))

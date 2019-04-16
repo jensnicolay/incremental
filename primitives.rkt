@@ -17,10 +17,12 @@
 (define-value-prim! "char?" char?)
 (define-value-prim! "integer?" integer?)
 (define-value-prim! "eq?" equal?) ; eq? -> equal? correct
-(define-value-prim! "number->string" number->string)
+(define-value-prim! "eqv?" equal?) ; eqv? -> equal? correct
+(define-value-prim! "exact->inexact" exact->inexact)
 (define-value-prim! "symbol->string" symbol->string)
 (define-value-prim! "string->symbol" string->symbol)
 (define-value-prim! "string->number" string->number)
+(define-value-prim! "number->string" number->string)
 (define-value-prim! "not" not)
 (define-value-prim! "remainder" remainder)
 (define-value-prim! "modulo" modulo)
@@ -36,6 +38,7 @@
 (define-value-prim! "log" log)
 (define-value-prim! "ceiling" ceiling)
 (define-value-prim! "quotient" quotient)
+(define-value-prim! "max" max)
 
 (define-value-prim! "pair?"
   (lambda (d-rand . _)
@@ -49,6 +52,16 @@
     (printf "EXPLORE: ~v\n" d-rands)
     '<unspecified>))    
 
+(define-value-prim! "newline"
+  (lambda ()
+    (printf "EXPLORE: \n")
+    '<unspecified>))
+
+(define-value-prim! "vector-length"
+  (lambda (d-rand)
+    (match d-rand
+      ((obj («make-vector» _ e-length _) s)
+        (graph-eval e-length s)))))
 
  (define-compile-prim! "list"
    '(lambda x x))

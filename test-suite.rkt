@@ -44,26 +44,26 @@
 (test-machine (file->value "test/fib.scm")        21)
 (test-machine (file->value "test/collatz.scm")    5)
 
-;(test-machine (file->value "test/browse.scm")     '<undefined>)  ; TOO LONG
+;(test-machine (file->value "test/browse.scm") '<undefined>)  ; TOO LONG
 (test-machine (file->value "test/churchnums.scm") #t)
 (test-machine (file->value "test/classtree.scm") #f)
 (test-machine (file->value "test/dderiv.scm") #t)
 (test-machine (file->value "test/deriv.scm") #t)
 ;(test-machine (file->value "test/destruc.scm") ???) ; OUTPUT
-;(test-machine (file->value "test/fannkuch.scm") 4) ; vectors
-;(test-machine (file->value "test/graphs.scm") 596) ; vectors
-;(test-machine (file->value "test/grid.scm") #t) ; vectors
-;(test-machine (file->value "test/matrix.scm") ???) ; vectors, output: (mcons 215 (mcons 960 (mcons 1220 1775)))
+(test-machine (file->value "test/fannkuch.scm") 4)
+;(test-machine (file->value "test/graphs.scm") 596) ; H-O cons
+(test-machine (file->value "test/grid.scm") #t)
+;(test-machine (file->value "test/matrix.scm") ???) ; output: (mcons 215 (mcons 960 (mcons 1220 1775)))
 ;(test-machine (file->value "test/mazefun.scm") #t) ; TOO LONG
 ;(test-machine (file->value "test/mceval.scm") 2) ; TOO LONG
 (test-machine (file->value "test/partialsums.scm") 77030060483083029083/96845140757687397075)
 (test-machine (file->value "test/primtest.scm") 1)
 (test-machine (file->value "test/regex.scm") #t)
 (test-machine (file->value "test/scm2java.scm") "public class BOut extends RuntimeEnvironment {n public static void main (String[] args) {n((ProcValue1)(new NullProcValue1 () {n public Value apply(final Value x) {n final ValueCell m_x = new ValueCell(x);nn  return ((ProcValue1)(new NullProcValue1 () {n public Value apply(final Value f) {nn  return ((ProcValue1)(f)).apply(new IntValue(10))n ;n}}n)).apply(((ProcValue1)(((ProcValue1)(new NullProcValue1 () {n public Value apply(final Value h) {nn  return new NullProcValue1 () {n public Value apply(final Value F) {nn  return ((ProcValue1)(F)).apply(new NullProcValue1 () {n public Value apply(final Value x1) {nn  return ((ProcValue1)(((ProcValue1)(((ProcValue1)(h)).apply(h)n)).apply(F)n)).apply(x1)n ;n}}n)n ;n}}n ;n}}n)).apply(new NullProcValue1 () {n public Value apply(final Value h) {nn  return new NullProcValue1 () {n public Value apply(final Value F) {nn  return ((ProcValue1)(F)).apply(new NullProcValue1 () {n public Value apply(final Value x1) {nn  return ((ProcValue1)(((ProcValue1)(((ProcValue1)(h)).apply(h)n)).apply(F)n)).apply(x1)n ;n}}n)n ;n}}n ;n}}n)n)).apply(new NullProcValue1 () {n public Value apply(final Value f) {nn  return new NullProcValue1 () {n public Value apply(final Value n) {nn  return (n).toBoolean() ? (VoidValue.Void(m_x.value = new IntValue(3))) : (((ProcValue1)(new NullProcValue1 () {n public Value apply(final Value $_) {nn  return ((ProcValue1)(new NullProcValue1 () {n public Value apply(final Value $_) {nn  return f ;n}}n)).apply(n)n ;n}}n)).apply(m_x.value)n) ;n}}n ;n}}n)n)n ;n}}n)).apply(new IntValue(10))n ;n }n}n")
-;(test-machine (file->value "test/spectralnorm.scm") 1.1833501765516568) ; vectors
+(test-machine (file->value "test/spectralnorm.scm") 1.1833501765516568)
 (test-machine (file->value "test/supermerge.scm") #t)
 (test-machine (file->value "test/treeadd.scm") 15)
-;(test-machine (file->value "test/triangl.scm") ???) ; vectors ; (mcons 22 (mcons 34 (mcons 31 (mcons 15 (mcons 7 (mcons 1 (mcons 20 (mcons 17 (mcons 25 (mcons 6 (mcons 5 (mcons 13 (mcons 32 '())))))))))))))
+;(test-machine (file->value "test/triangl.scm") ???) ; TOO LONG ; (mcons 22 (mcons 34 (mcons 31 (mcons 15 (mcons 7 (mcons 1 (mcons 20 (mcons 17 (mcons 25 (mcons 6 (mcons 5 (mcons 13 (mcons 32 '())))))))))))))
 ;(test-machine (file->value "test/boyer.scm") #t) ; TOO LONG
 
 (define end-time (current-milliseconds))
