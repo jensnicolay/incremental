@@ -494,8 +494,8 @@
 ;;; TESTS
 
 (module+ main
- (parameterize-full-debug!)
+ ;(parameterize-full-debug!)
  (conc-eval
   (compile
-      (file->value "test/triangl.scm")
+      (file->value "test/graphs.scm")
   )))

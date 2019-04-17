@@ -68,6 +68,11 @@
       ((obj («make-vector» _ e-length _) s)
         (graph-eval e-length s)))))
 
+(define-compile-prim! "cons" ; for h-o
+   '(lambda (a d)
+      (cons a d)))
+
+
  (define-compile-prim! "list"
    '(lambda x x))
 
