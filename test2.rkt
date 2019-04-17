@@ -57,7 +57,7 @@
 (test-machine (file->value "test/grid.scm") #t)
 (test-machine `(let ((result ,(file->value "test/matrix.scm"))) (tostring result)) "(215 . (960 . (1220 . 1775)))")
 ;(test-machine (file->value "test/mazefun.scm") #t) ; TOO LONG
-;(test-machine (file->value "test/mceval.scm") 2) ; TOO LONG
+(test-machine (file->value "test/mceval.scm") 2)
 (test-machine (file->value "test/partialsums.scm") 77030060483083029083/96845140757687397075)
 (test-machine (file->value "test/primtest.scm") 1)
 (test-machine (file->value "test/regex.scm") #t)
@@ -65,7 +65,7 @@
 (test-machine (file->value "test/spectralnorm.scm") 1.1833501765516568)
 (test-machine (file->value "test/supermerge.scm") #t)
 (test-machine (file->value "test/treeadd.scm") 15)
-;(test-machine `(let ((result ,(file->value "test/triangl.scm"))) (tostring result)) "(22 . (34 . (31 . (15 . (7 . (1 . (20 . (17 . (25 . (6 . (5 . (13 . (32 . ())))))))))))))") ; TOO LONG ;
+;(test-machine `(let ((result ,(file->value "test/triangl.scm"))) (tostring result)) "(22 . (34 . (31 . (15 . (7 . (1 . (20 . (17 . (25 . (6 . (5 . (13 . (32 . ())))))))))))))") ; TOO LONG
 ;(test-machine (file->value "test/boyer.scm") #t) ; TOO LONG
 
 (define end-time (current-milliseconds))
