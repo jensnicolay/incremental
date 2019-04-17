@@ -46,7 +46,7 @@
 (test-machine (file->value "test/fib.scm")        21)
 (test-machine (file->value "test/collatz.scm")    5)
 
-;(test-machine (file->value "test/browse.scm") '<undefined>)  ; TOO LONG
+;(test-machine (file->value "test/browse.scm") '<undefined>)  ; correct, ±63 mins
 (test-machine (file->value "test/churchnums.scm") #t)
 (test-machine (file->value "test/classtree.scm") #f)
 (test-machine (file->value "test/dderiv.scm") #t)
@@ -65,7 +65,7 @@
 (test-machine (file->value "test/spectralnorm.scm") 1.1833501765516568)
 (test-machine (file->value "test/supermerge.scm") #t)
 (test-machine (file->value "test/treeadd.scm") 15)
-;(test-machine (file->value "test/triangl.scm") ???) ; TOO LONG ; (mcons 22 (mcons 34 (mcons 31 (mcons 15 (mcons 7 (mcons 1 (mcons 20 (mcons 17 (mcons 25 (mcons 6 (mcons 5 (mcons 13 (mcons 32 '())))))))))))))
+;(test-machine `(let ((result ,(file->value "test/triangl.scm"))) (tostring result)) "(22 . (34 . (31 . (15 . (7 . (1 . (20 . (17 . (25 . (6 . (5 . (13 . (32 . ())))))))))))))") ; TOO LONG ;
 ;(test-machine (file->value "test/boyer.scm") #t) ; TOO LONG
 
 (define end-time (current-milliseconds))

@@ -217,34 +217,38 @@
       (hash-ref lvr key
         (lambda ()
           (let ((r (ast-helper s)))
-            ;(set! lvr (hash-set lvr key r))
+            ;(set! lvr (hash-set lvr key r)) ;;; LVR CACHING
             r))))))
     (and debug-print-out (debug-print-out "#~v: lookup-var-root ~a: ~a" (state->statei s) x (user-print r)))
     r))
 
+(define evr-helper-cache (hash)) ; this is not as the other caches (this cache is used in helper)
 (define (eval-var-root x r s) ; the `x` param is optimization (see below)
   (and debug-print-in (debug-print-in "#~v: eval-var-root ~a" (state->statei s) (user-print r)))
   
   (match-let (((root e-r s-r) r)) 
 
   (define (eval-var-root-helper s)
-      ;((debug-print)"#~v: eval-var-root-helper" (state->statei s))
-      (match s
-        ((== s-r)
-         (graph-eval e-r s-r))
-        ((state e κ)
-         (match e
-            ((«set!» _ («id» _ (== x)) e-update) ; `== x` avoids looking up var-roots for different name (which can never match `b` anyway)
-              (let ((r* (lookup-var-root x s)))
-                (if (equal? r r*)
-                    (graph-eval e-update s)
-                    (eval-var-root-helper (predecessor s g)))))
-            (_
-              (eval-var-root-helper (predecessor s g)))
-            ))
-          ))
+      (and debug-print (debug-print "#~v: eval-var-root-helper r ~a" (state->statei s) (user-print r)))
+      (hash-ref evr-helper-cache (cons s r)
+        (lambda ()
+          (match s
+            ((== s-r)
+            (graph-eval e-r s-r))
+            ((state e κ)
+            (match e
+                ((«set!» _ («id» _ (== x)) e-update) ; `== x` avoids looking up var-roots for different name (which can never match `b` anyway)
+                  (let ((r* (lookup-var-root x s)))
+                    (if (equal? r r*)
+                        (graph-eval e-update s)
+                        (eval-var-root-helper (predecessor s g)))))
+                (_
+                  (eval-var-root-helper (predecessor s g)))
+                ))
+              ))))
 
   (let ((d (eval-var-root-helper (predecessor s g))))
+    (set! evr-helper-cache (hash-set evr-helper-cache (cons s r) d))
     (and debug-print-out (debug-print-out "#~v: eval-var-root ~a: ~a" (state->statei s) (user-print r) (user-print d)))
     d)))
 
@@ -271,52 +275,60 @@
                 ; (((obj (cons _ e-cdr) s-root) 'cdr)
                 ;  (root e-cdr s-root))
               ))))
-            ;(set! lpr (hash-set lpr key r))
+            ;(set! lpr (hash-set lpr key r)) ;;; LPR CACHING
             r))))))
     (and debug-print-out (debug-print-out "#~v: lookup-path-root ~a ~a: ~a" (state->statei s) (ast->string e-id) f (user-print root)))
     root))
 
-
-(define (eval-path-root r s) ; whart if we keep field-name (quicker lookup distinction)
+(define epr-helper-cache (hash)) ; this is not as the other caches (this cache is used in helper)
+(define (eval-path-root r s) ; what if we keep field-name (quicker lookup distinction)
   (and debug-print-in (debug-print-in "#~v: eval-path-root ~a" (state->statei s) (user-print r)))
   
   (let
     ((s-r (root-s r)))
 
     (define (eval-path-root-helper s)
-        (and debug-print (debug-print "#~v: eval-path-root-helper" (state->statei s)))
-        (match s
-          ((== s-r)
-            (match r
-              ((root (cons e-r f) s-r) (graph-eval e-r s-r))
-              ((root e-r s-r) (graph-eval e-r s-r))))
-          ((state e κ)
-           (match e
-             ((«set-car!» _ e-id e-update)
-              (let ((r* (lookup-path-root e-id 'car s)))
-                (if (equal? r r*)
-                    (graph-eval e-update s)
-                    (eval-path-root-helper (predecessor s g)))))
-             ((«set-cdr!» _ e-id e-update)
-              (let ((r* (lookup-path-root e-id 'cdr s)))
-                (if (equal? r r*)
-                    (graph-eval e-update s)
-                    (eval-path-root-helper (predecessor s g)))))
-             ((«vector-set!» _ e-id e-index e-update)
-              (let ((d-index (graph-eval e-index s))) ; could be used to avoid looking up path root (if index ≠)
-                (let ((r* (lookup-path-root e-id d-index s)))
-                  (if (equal? r r*)
-                      (graph-eval e-update s)
-                      (eval-path-root-helper (predecessor s g))))))
-             (_ ; TODO not all cases handled yet!
-              (eval-path-root-helper (predecessor s g)))
-             ))
-          ))
+        ;(and debug-print (debug-print "#~v: eval-path-root-helper r ~a" (state->statei s) (user-print r)))
+
+        (let ((cached (hash-ref epr-helper-cache (cons s r) #f)))
+        (if cached
+            (begin 
+              ;(and debug-print (debug-print "#~v: CACHE HIT eval-path-root-helper r ~a" (state->statei s) (user-print r)))
+              cached)
+            (match s
+              ((== s-r)
+                (match r
+                  ((root (cons e-r f) s-r) (graph-eval e-r s-r))
+                  ((root e-r s-r) (graph-eval e-r s-r))))
+              ((state e κ)
+              (match e
+                ((«set-car!» _ e-id e-update)
+                  (let ((r* (lookup-path-root e-id 'car s)))
+                    (if (equal? r r*)
+                        (graph-eval e-update s)
+                        (eval-path-root-helper (predecessor s g)))))
+                ((«set-cdr!» _ e-id e-update)
+                  (let ((r* (lookup-path-root e-id 'cdr s)))
+                    (if (equal? r r*)
+                        (graph-eval e-update s)
+                        (eval-path-root-helper (predecessor s g)))))
+                ((«vector-set!» _ e-id e-index e-update)
+                  (let ((d-index (graph-eval e-index s))) ; could be used to avoid looking up path root (if index ≠)
+                    (let ((r* (lookup-path-root e-id d-index s)))
+                      (if (equal? r r*)
+                          (graph-eval e-update s)
+                          (eval-path-root-helper (predecessor s g))))))
+                (_ ; TODO not all cases handled yet!
+                  (eval-path-root-helper (predecessor s g)))
+                ))
+              ))))
 
     (let ((result (eval-path-root-helper (predecessor s g))))
+      (set! epr-helper-cache (hash-set epr-helper-cache (cons s r) result))
       (and debug-print-out (debug-print-out "#~v: eval-path-root ~a: ~v" (state->statei s) (user-print r) result))
       result)))
 
+  (define kcache (hash))
   (define (cont s)
     (and debug-print-in (debug-print-in "#~v: cont" (state->statei s)))
 
@@ -338,7 +350,14 @@
           (#f #f)
           (_ (cont-helper p κ))
           )))
-    (let ((s-kont (cont-helper (state-e s) (state-κ s))))
+
+    (let ((s-kont 
+      (hash-ref kcache s
+        (lambda ()
+          (let ((s-kont
+            (cont-helper (state-e s) (state-κ s))))
+            ;(set! kcache (hash-set kcache s s-kont)) ; CONT CACHING
+            s-kont)))))
       (and debug-print-out (debug-print-out "#~v: cont: ~a" (state->statei s) (user-print s-kont)))
       s-kont))
 
@@ -367,6 +386,11 @@
             ((«if» _ e-cond e-then e-else)
             (let ((d-cond (graph-eval e-cond s)))
               (state (if d-cond e-then e-else) κ)))
+
+            ((«app» _ («id» _ "display") e-rands)
+              (printf "DISPDEB: ~a ~a\n" (graph-eval (car e-rands) s) (- (current-milliseconds) explore-start-time))
+              (cont s))
+
             ((«app» _ e-rator e-rands)
             (let ((d-proc (graph-eval e-rator s)))
               (match d-proc
@@ -390,9 +414,11 @@
             (explore! s*))
           s)))
 
+  (define explore-start-time (current-milliseconds))
   (define s-end (explore! s0))
+  (define explore-time (- (current-milliseconds) explore-start-time))
 
-  (and debug-print (debug-print "EXPLORED ~v -> ~a" (state->statei s0) (user-print s-end)))
+  (and debug-print (debug-print "EXPLORED ~v -> ~v in ~a ms" (state->statei s0) (state->statei s-end) explore-time))
 
   (define (dispatcher msg)
     (match msg
@@ -468,8 +494,8 @@
 ;;; TESTS
 
 (module+ main
- ;(parameterize-full-debug!)
+ (parameterize-full-debug!)
  (conc-eval
   (compile
-      `(let ((result ,(file->value "test/matrix.scm"))) (tostring result))
+      (file->value "test/triangl.scm")
   )))

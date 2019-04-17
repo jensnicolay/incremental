@@ -1,3 +1,5 @@
+(let ((result
+(let ((counter (let ((c 0)) (lambda () (let ((cc (+ c 1))) (let ((+++ (set! c cc))) (display cc)))))))
 (let ((*board* '<undefined>))
   (let ((*sequence* '<undefined>))
     (let ((*a* '<undefined>))
@@ -27,7 +29,9 @@
                                                                                                (if _p13 (let ((_p14 (vector->list *sequence*)))
                                                                                                           (let ((_p15 (cdr _p14)))
                                                                                                             (let ((_p16 (cons _p15 *answer*)))
-                                                                                                              (let ((_$17 (set! *answer* _p16))) #t))))
+                                                                                                              (let ((_$17 (set! *answer* _p16)))
+                                                                                                                (let ((+++ (counter)))
+                                                                                                                #t)))))
                                                                                                    (let ((_p18 (vector-ref *a* i)))
                                                                                                      (let ((_p19 (vector-ref *board* _p18)))
                                                                                                        (let ((_p20 (= 1 _p19)))
@@ -44,6 +48,7 @@
                                                                                                                               (let ((_$32 (vector-set! *board* _p31 1)))
                                                                                                                                 (let ((_$33 (vector-set! *sequence* depth i)))
                                                                                                                                   (letrec ((_loop0 (lambda (j depth )
+                                                                                                                                                     
                                                                                                                                                      (let ((_t1 (= j 36)))
                                                                                                                                                        (let ((_p34 (if _t1 _t1 (attempt j depth))))
                                                                                                                                                          (if _p34 #f (let ((_p35 (+ j 1))) (_loop0 _p35 depth))))))))
@@ -59,5 +64,7 @@
                                                                            (let ((_$45 (set! *answer* '())))
                                                                              (let ((_$46 (attempt i depth)))
                                                                                (car *answer*)))))))
-                                                    (test 22 1)))))))))))))))))))))))))))
+                                                    (test 22 1))))))))))))))))))))))))))))))
+  (tostring result))
+
 
