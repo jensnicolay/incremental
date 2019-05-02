@@ -19,7 +19,3 @@
   (let ((out (open-output-file file #:exists 'replace)))
     (write value out)
     (close-output-port out)))
-
-(define (debug val . out)
-  ;(printf "~a: ~a\n" (car out) (cdr out))
-  val)

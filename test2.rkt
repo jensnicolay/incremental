@@ -37,10 +37,12 @@
 (test-machine '(let ((l (list))) (eq? l '())) #t)
 (test-machine '(let ((l (list))) (null? l)) #t)
 
-
-
 (test-machine '(let ((p (cons 1 2))) (let ((q (cons 1 2))) (equal? p q))) #t)
 (test-machine '(let ((p (cons 1 2))) (let ((q (cons 1 3))) (equal? p q))) #f)
+
+(test-machine '(let ((v (make-vector 10 'x))) (vector-length v)) 10)
+(test-machine '(let ((i 10)) (let ((v (make-vector i 'x))) (vector-length v))) 10)
+
 
 ;warmup
 (test-machine (file->value "test/fib.scm")        21)

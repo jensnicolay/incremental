@@ -1,72 +1,72 @@
-(define-value-prim! "=" =)
-(define-value-prim! "zero?" zero?)
-(define-value-prim! "<" <)
-(define-value-prim! "<=" <=)
-(define-value-prim! ">" >)
-(define-value-prim! ">=" >=)
-(define-value-prim! "+" +)
-(define-value-prim! "-" -)
-(define-value-prim! "*" *)
-(define-value-prim! "/" /)
-(define-value-prim! "even?" even?)
-(define-value-prim! "odd?" odd?)
-(define-value-prim! "null?" null?)
-(define-value-prim! "number?" number?)
-(define-value-prim! "string?" string?)
-(define-value-prim! "symbol?" symbol?)
-(define-value-prim! "char?" char?)
-(define-value-prim! "integer?" integer?)
-(define-value-prim! "eq?" equal?) ; eq? -> equal? correct
-(define-value-prim! "eqv?" equal?) ; eqv? -> equal? correct
-(define-value-prim! "exact->inexact" exact->inexact)
-(define-value-prim! "symbol->string" symbol->string)
-(define-value-prim! "string->symbol" string->symbol)
-(define-value-prim! "string->number" string->number)
-(define-value-prim! "number->string" number->string)
-(define-value-prim! "not" not)
-(define-value-prim! "remainder" remainder)
-(define-value-prim! "modulo" modulo)
-(define-value-prim! "string" string)
-(define-value-prim! "string-ref" string-ref)
-(define-value-prim! "string-length" string-length)
-(define-value-prim! "string-append" string-append)
-(define-value-prim! "sin" sin)
-(define-value-prim! "cos" cos)
-(define-value-prim! "expt" expt)
-(define-value-prim! "sqrt" sqrt)
-(define-value-prim! "%random" (lambda (n) (if (zero? n) 0 (random n))))
-(define-value-prim! "log" log)
-(define-value-prim! "ceiling" ceiling)
-(define-value-prim! "quotient" quotient)
-(define-value-prim! "max" max)
+; (define-value-prim! "=" =)
+; (define-value-prim! "zero?" zero?)
+; (define-value-prim! "<" <)
+; (define-value-prim! "<=" <=)
+; (define-value-prim! ">" >)
+; (define-value-prim! ">=" >=)
+; (define-value-prim! "+" +)
+; (define-value-prim! "-" -)
+; (define-value-prim! "*" *)
+; (define-value-prim! "/" /)
+; (define-value-prim! "even?" even?)
+; (define-value-prim! "odd?" odd?)
+; (define-value-prim! "null?" null?)
+; (define-value-prim! "number?" number?)
+; (define-value-prim! "string?" string?)
+; (define-value-prim! "symbol?" symbol?)
+; (define-value-prim! "char?" char?)
+; (define-value-prim! "integer?" integer?)
+; (define-value-prim! "eq?" equal?) ; eq? -> equal? correct
+; (define-value-prim! "eqv?" equal?) ; eqv? -> equal? correct
+; (define-value-prim! "exact->inexact" exact->inexact)
+; (define-value-prim! "symbol->string" symbol->string)
+; (define-value-prim! "string->symbol" string->symbol)
+; (define-value-prim! "string->number" string->number)
+; (define-value-prim! "number->string" number->string)
+; (define-value-prim! "not" not)
+; (define-value-prim! "remainder" remainder)
+; (define-value-prim! "modulo" modulo)
+; (define-value-prim! "string" string)
+; (define-value-prim! "string-ref" string-ref)
+; (define-value-prim! "string-length" string-length)
+; (define-value-prim! "string-append" string-append)
+; (define-value-prim! "sin" sin)
+; (define-value-prim! "cos" cos)
+; (define-value-prim! "expt" expt)
+; (define-value-prim! "sqrt" sqrt)
+; (define-value-prim! "%random" (lambda (n) (if (zero? n) 0 (random n))))
+; (define-value-prim! "log" log)
+; (define-value-prim! "ceiling" ceiling)
+; (define-value-prim! "quotient" quotient)
+; (define-value-prim! "max" max)
 
-(define-value-prim! "pair?"
-  (lambda (d-rand . _)
-    (match d-rand
-      ((obj («cons» _ _ _) _)
-        #t)
-      (_ #f))))
+; (define-value-prim! "pair?"
+;   (lambda (d-rand . _)
+;     (match d-rand
+;       ((obj («cons» _ _ _) _)
+;         #t)
+;       (_ #f))))
 
-(define-value-prim! "display"
-  (lambda d-rands
-    (printf "EXPLORE: ~v\n" d-rands)
-    '<unspecified>))    
-
-(define-value-prim! "newline"
-  (lambda ()
-    (printf "EXPLORE: \n")
-    '<unspecified>))
-
-; (define-value-prim! "error"
+; (define-value-prim! "display"
 ;   (lambda d-rands
-;     (error "ERROR" d-rands)
+;     (printf "EXPLORE: ~v\n" d-rands)
+;     '<unspecified>))    
+
+; (define-value-prim! "newline"
+;   (lambda ()
+;     (printf "EXPLORE: \n")
 ;     '<unspecified>))
 
-(define-value-prim! "vector-length"
-  (lambda (d-rand)
-    (match d-rand
-      ((obj («make-vector» _ e-length _) s)
-        (graph-eval e-length s)))))
+; ; (define-value-prim! "error"
+; ;   (lambda d-rands
+; ;     (error "ERROR" d-rands)
+; ;     '<unspecified>))
+
+; (define-value-prim! "vector-length"
+;   (lambda (d-rand)
+;     (match d-rand
+;       ((obj («make-vector» _ e-length _) s)
+;         (graph-eval e-length s)))))
 
 (define-compile-prim! "cons" ; for h-o
    '(lambda (a d)

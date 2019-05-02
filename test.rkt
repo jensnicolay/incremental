@@ -2,6 +2,7 @@
 
 (require "ast.rkt")
 (require "machine.rkt")
+(require "lattice.rkt")
 
 ;(parameterize-full-debug!)
 
@@ -372,8 +373,6 @@
 (test-machine '(let ((v (make-vector 10 'x))) (let ((i 3)) (vector-ref v i))) 'x)
 (test-machine '(let ((v (make-vector 10 'x))) (let ((i 3)) (let ((u (vector-set! v i 'y))) (vector-ref v i)))) 'y)
 (test-machine '(let ((i 10)) (let ((v (make-vector i 'x))) (vector-ref v 3))) 'x)
-(test-machine '(let ((v (make-vector 10 'x))) (vector-length v)) 10)
-(test-machine '(let ((i 10)) (let ((v (make-vector i 'x))) (vector-length v))) 10)
 ; TODO out of bounds stuff
 
 ; lazy
