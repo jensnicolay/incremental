@@ -19,6 +19,27 @@
 (struct «vector-set!» (l x ae1 ae2) #:transparent)
 (struct «make-vector» (l ae1 ae2) #:transparent)
 
+(define (ast? e)
+  (match e
+    ((«id» _ _) #t)
+    ((«lit» _ _) #t)
+    ((«lam» _ _ _) #t)
+    ((«let» _ _ _ _) #t)
+    ((«letrec» _ _ _ _) #t)
+    ((«if» _ _ _ _) #t)
+    ((«car» _ _) #t)
+    ((«cdr» _ _) #t)
+    ((«set!» _ _ _) #t)
+    ((«set-car!» _ _ _) #t)
+    ((«set-cdr!» _ _ _) #t)
+    ((«cons» _ _ _) #t)
+    ((«make-vector» _ _ _) #t)
+    ((«vector-ref» _ _ _) #t)
+    ((«vector-set!» _ _ _ _) #t)
+    ((«quo» _ _) #t)
+    ((«app» _ _ _) #t)
+    (_ #f)))
+
 (define (ast-label e)
   (match e
     ((«id» l _) l)
@@ -39,7 +60,6 @@
     ((«quo» l _) l)
     ((«app» l _ _) l)
     (_ (error "ast-label: cannot handle expression" e))))
-
 
 (define (make-compiler)
   (define l -1)
@@ -91,7 +111,7 @@
       (_ (compile2 es))))
   compile2)
          
-(define (ae? e)
+(define (ae? e) ; deprecate?
   (match e
     ((«lit» _ _) #t)
     ((«id» _ _) #t)

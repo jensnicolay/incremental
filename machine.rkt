@@ -4,13 +4,14 @@
 (require "ast.rkt")
 (require "lattice.rkt")
 
-(provide compile conc-eval parameterize-full-debug!)
+(provide compile conc-eval type-eval parameterize-full-debug!)
 (random-seed 111)
 
 ;;;;;;;;;;
 (define debug-print-in #f)
 (define debug-print-out #f)
 (define debug-print #f)
+(define output-graph #f)
 ;;;;;;;;;;
 
 (struct letk (x e ρ) #:transparent)
@@ -36,7 +37,11 @@
 (define (points-to? s s* g)
   (set-member? (hash-ref (graph-fwd g) s (set)) s*))
 
-(define (explore e0 lat)
+; (define (graph-has-node? g s)
+;   (or (hash-has-key? (graph-fwd g) s)
+;       (hash-has-key? (graph-bwd g) s)))
+
+(define (explore e0 lat kalloc)
 
   (define α (lattice-α lat)) 
   (define γ (lattice-γ lat))
@@ -48,14 +53,8 @@
   ; (define α-eq? (lattice-eq? lat))
   (define Prims-lat (lattice-global lat))
 
-  (define count!
-    (let ((counter 0))
-      (lambda ()
-        (begin0
-          counter
-          (set! counter (add1 counter))))))
-
-  (define s0 (state e0 (count!)))
+  
+  (define s0 (state e0 'κ0))
 
   (define Compiled-prims (hash))
   (define Parent-prim (hash))
@@ -90,75 +89,97 @@
   (define (parent e)
     (hash-ref Parent e #f))
 
+
+  ; because this cache is global (and not specific to a `ge` call), it needs to be maintained (cleared!) when needed!
+  (define ecache (hash))
+
+  ; remember: `ge` never causes graph updates (does not invoke `step`)
   (define (graph-eval e s) ; general TODO: every fw movement should be restrained to previous path(s)
     (and debug-print-in (debug-print-in "#~v: graph-eval ~v" (state->statei s) (ast->string e)))
+    ;(prompt "graph-eval")
 
-    (let ((d-result
-        (match e
-          ((«lit» _ d)
-            (α d))
-          ((«id» _ x)
-            (for/fold ((d ⊥)) ((r (in-set (lookup-var-root x s))))
-              (⊔ d (if r
-                        (eval-var-root x r s)
-                        (or (hash-ref Prims-lat x #f) ; by doing this check here, and not using e-var-root for unbound stuff, prims cannot be redefined
-                            (hash-ref Compiled-prims x #f)
-                            (error "unbound variable" x))))))
-          ((«lam» _ _ _)
-            (obj e s))
-          ((«quo» _ d)
-            d)
-          ((«let» _ _ _ e-body)
-            (let ((s* (state e-body (state-κ s))))
-              (graph-eval e-body s*)))
-          ((«letrec» _ _ _ e-body)
-            (let ((s* (state e-body (state-κ s))))
-              (graph-eval e-body s*)))
-          ((«if» _ _ _ _)
-            (let ((S-succ (successors s g)))
-              (for/fold ((d-result ⊥)) ((s* (in-set S-succ)))
-                (⊔ d-result (graph-eval (state-e s*) s*)))))
-          ((«set!» _ _ _)
-            '<unspecified>)
-          ((«app» _ e-rator e-rands) ; possible logic: check for 0 or 1+ compound apps
-            (let ((d-compound
-                (for/fold ((d ⊥)) ((s-succ (in-set (successors s g))))
-                  (match s-succ
-                    ((state (? (lambda (e) (body-expression? e)) e-body) _)
-                      (⊔ d (graph-eval e-body s-succ)))
-                    (_
-                      d)))))
-              (let ((d-prim
-                  (let ((d-proc (graph-eval e-rator s)))
-                    (for/fold ((d ⊥)) ((proc (in-set (γ d-proc))))
-                      (match proc
-                        ((prim2 _ proc)
-                          (let ((d-rands (map (lambda (e-rand) (graph-eval e-rand s)) e-rands))) ; TODO fix multiple evals for multiple prims
-                            (⊔ d (apply proc d-rands))))
-                        (_
-                          d)
-                      )))))
-                (⊔ d-compound d-prim))))
-          ((«cons» _ _ _)
-            (obj e s))
-          ((«car» _ e-id)
-            (let ((R (lookup-path-root e-id 'car s)))
-              (for/fold ((d ⊥)) ((r (in-set R)))
-                (⊔ d (eval-path-root r s)))))
-          ((«cdr» _ e-id)
-            (let ((R (lookup-path-root e-id 'cdr s)))
-              (for/fold ((d ⊥)) ((r (in-set R)))
-                (⊔ d (eval-path-root r s)))))
-          ((«make-vector» _ _ _)
-            (obj e s))
-          ((«vector-ref» _ e-id e-index)
-            (let ((d-index (graph-eval e-index s)))
-              (let ((R (lookup-path-root e-id d-index s))) ; TODO subsumption of indices
-                (for/fold ((d ⊥)) ((r (in-set R)))
-                  (⊔ d (eval-path-root r s))))))
-          )))
-      (and debug-print-out (debug-print-out "#~v: graph-eval ~v: ~a" (state->statei s) (ast->string e) (user-print d-result)))
-      d-result))
+    (let ((key (cons e s)))
+      (if (hash-has-key? ecache key)
+          (let ((d-result (hash-ref ecache key)))
+            (and debug-print-out (debug-print-out "#~v: graph-eval ~v: [from cache] ~a" (state->statei s) (ast->string e) (user-print d-result)))
+            d-result)
+          (begin
+            (set! ecache (hash-set ecache key ⊥))
+            (let ((d-result
+                (match e
+                  ((«lit» _ d)
+                    (α d))
+                  ((«id» _ x)
+                    (for/fold ((d ⊥)) ((r (in-set (lookup-var-root x s))))
+                      (⊔ d (if r
+                                (eval-var-root x r s)
+                                (or (hash-ref Prims-lat x #f) ; by doing this check here, and not using e-var-root for unbound stuff, prims cannot be redefined
+                                    (hash-ref Compiled-prims x #f)
+                                    (error "unbound variable" x))))))
+                  ((«lam» _ _ _)
+                    (α (obj e s)))
+                  ((«quo» _ d)
+                    (α d))
+                  ((«let» _ _ _ e-body)
+                    (let ((s* (state e-body (state-κ s))))
+                      (graph-eval e-body s*)))
+                  ((«letrec» _ _ _ e-body)
+                    (let ((s* (state e-body (state-κ s))))
+                      (graph-eval e-body s*)))
+                  ((«if» _ _ _ _)
+                    (let ((S-succ (successors s g)))
+                      (for/fold ((d-result ⊥)) ((s* (in-set S-succ)))
+                        (⊔ d-result (graph-eval (state-e s*) s*)))))
+                  ((«set!» _ _ _)
+                    (α '<unspecified>))
+                  ((«app» _ e-rator e-rands) ; possible logic: check for 0 or 1+ compound apps
+                    (let ((d-compound
+                        (for/fold ((d ⊥)) ((s-succ (in-set (successors s g))))
+                          (match s-succ
+                            ((state (? (lambda (e) (body-expression? e)) e-body) _)
+                              (⊔ d (graph-eval e-body s-succ)))
+                            (_
+                              d)))))
+                      (let ((d-prim
+                          (let ((d-proc (graph-eval e-rator s)))
+                            (for/fold ((d ⊥)) ((proc (in-set (γ d-proc))))
+                              (match proc
+                                ((prim2 _ proc)
+                                  (let ((d-rands (map (lambda (e-rand) (graph-eval e-rand s)) e-rands))) ; TODO fix multiple evals for multiple prims
+                                    (⊔ d (apply proc d-rands))))
+                                (_
+                                  d)
+                              )))))
+                        (⊔ d-compound d-prim))))
+                  ((«cons» _ _ _)
+                    (α (obj e s)))
+                  ((«car» _ e-id)
+                    (let ((R (lookup-path-root e-id 'car s)))
+                      (for/fold ((d ⊥)) ((r (in-set R)))
+                        (⊔ d (eval-path-root r s)))))
+                  ((«cdr» _ e-id)
+                    (let ((R (lookup-path-root e-id 'cdr s)))
+                      (for/fold ((d ⊥)) ((r (in-set R)))
+                        (⊔ d (eval-path-root r s)))))
+                  ((«make-vector» _ _ _)
+                    (α (obj e s)))
+                  ((«vector-ref» _ e-id e-index)
+                    (let ((d-index (graph-eval e-index s)))
+                      (let ((R (lookup-path-root e-id d-index s))) ; TODO subsumption of indices
+                        (for/fold ((d ⊥)) ((r (in-set R)))
+                          (⊔ d (eval-path-root r s))))))
+                  )))
+              (and debug-print-out (debug-print-out "#~v: graph-eval ~v: ~a" (state->statei s) (ast->string e) d-result))
+
+              
+              ; ; assert still in progress
+              ; (unless (equal? (hash-ref ecache key) ⊥)
+              ;   (error "assertion violated" (hash-ref ecache key)))
+
+              ; update cache
+              (set! ecache (hash-set ecache key d-result))
+              
+              d-result)))))
 
 (define (lookup-var-root x s)
   (and debug-print-in (debug-print-in "#~v: lookup-var-root ~a" (state->statei s) x))
@@ -172,7 +193,7 @@
               (let* ((e (state-e s))
                      (κ (state-κ s))
                      (pa (parent e)))
-                ;((debug-print) "#~v: ast-helper x ~v pa ~v" (state->statei s) x (user-print pa))
+                ;(and debug-print (debug-print "#~v: ast-helper x ~v pa ~v" (state->statei s) x (and pa (ast->string pa))))
                 (match pa
                   ((«let» _ («id» _ (== x)) (and (not (== e)) e-init) _)
                     (ast-helper (set-rest W) (set-add V s) (set-add R (root e-init (state e-init κ))))) ; successor state exists because of `step`
@@ -184,23 +205,29 @@
                         (if (set-empty? S*)
                             (ast-helper W (set-add V s) R)
                             (let ((s* (set-first S*))) ; s* is application of compound
-                              (match s*
-                                ((state («app» _ e-rator e-args) _)
-                                  (let param-args-loop ((xs xs) (e-args e-args))
-                                    (if (null? xs)
-                                        (let ((d-clo (graph-eval e-rator s*)))
-                                          (match d-clo
-                                            ((obj _ s**) ; s** is where closure was created
-                                              ;((debug-print) "found closure: ~v" d-clo)
-                                              (pred-loop (set-rest S*) (set-add W s**) R))
-                                            (_
-                                              (pred-loop (set-rest S*) W (set-add R #f))))) ; prim (in prim?)
-                                        (let ((e-decl (car xs)))
-                                          (match e-decl
-                                              ((«id» _ (== x))
-                                                (pred-loop (set-rest S*) W (set-add R (root (car e-args) s*))))
-                                              (_
-                                                (param-args-loop (cdr xs) (cdr e-args))))))))))))))
+                              (if (set-member? V s*)
+                                  (pred-loop (set-rest S*) W R)
+                                  (match s*
+                                    ((state («app» _ e-rator e-args) _)
+                                      (let param-args-loop ((xs xs) (e-args e-args))
+                                        (if (null? xs)
+                                            (let ((d-clo (graph-eval e-rator s*)))
+                                              (let clo-loop ((Clo (γ d-clo)) (W W) (R R))
+                                                (if (set-empty? Clo)
+                                                    (pred-loop (set-rest S*) W R)
+                                                    (let ((cl (set-first Clo)))
+                                                      (match cl
+                                                        ((obj _ s**) ; s** is where closure was created
+                                                          ;((debug-print) "found closure: ~v" d-clo)
+                                                          (clo-loop (set-rest Clo) (set-add W s**) R))
+                                                        (_
+                                                          (clo-loop (set-rest Clo) W (set-add R #f)))))))) ; prim (in prim?)
+                                            (let ((e-decl (car xs)))
+                                              (match e-decl
+                                                  ((«id» _ (== x))
+                                                    (pred-loop (set-rest S*) W (set-add R (root (car e-args) s*))))
+                                                  (_
+                                                    (param-args-loop (cdr xs) (cdr e-args)))))))))))))))
                   ((«lam» _ («id» _ (== x)) _) 
                     (let ((R
                         (for/fold ((R R)) ((s* (in-set (predecessors s g))))
@@ -220,7 +247,7 @@
                   )))))))
 
             (let ((R (ast-helper (set s) (set) (set))))
-              (and debug-print-out (debug-print-out "#~v: lookup-var-root ~a: ~v" (state->statei s) x R))
+              (and debug-print-out (debug-print-out "#~v: lookup-var-root ~a: ~v" (state->statei s) x (user-print R)))
               R))
 
 (define (eval-var-root x r s) ; the `x` param is optimization (see below)
@@ -395,11 +422,14 @@
                       (let ((d-proc (set-first D-proc)))
                         (match d-proc
                           ((obj («lam» _ _ e-body) _)
-                            (let ((κ* (count!)))
+                            (let ((κ* (kalloc e d-proc)))
                               (let ((s* (state e-body κ*)))
                                 (d-proc-loop (set-rest D-proc) (set-add S-succ s*)))))
                           ((prim2 _ _)
-                            (d-proc-loop (set-rest D-proc) (set-union S-succ (cont s))))))))))
+                            (d-proc-loop (set-rest D-proc) (set-union S-succ (cont s))))
+                          (_
+                            (d-proc-loop (set-rest D-proc) S-succ))
+                        ))))))
             (_ (cont s))
           ))))
     (and debug-print (debug-print "#~v: step: ~a" (state->statei s) (set-map S-succ state->statei)))
@@ -408,25 +438,41 @@
   (define (explore! W V S-end)
     (if (set-empty? W)
         S-end
-    (let ((s (set-first W)))
-      (if (set-member? V s)
-          (explore! (set-rest W) V S-end)
-          (let ((S-succ (step s)))
-            (if (set-empty? S-succ)
-                (explore! (set-rest W) (set-add V s) (set-add S-end s))
-                (let ((V* (or (for/first ((s* (in-set S-succ)) #:when (points-to? s s* g))
-                                (set))
-                            (set-add V s))))
-                  (let ((W* (set-union (set-rest W) S-succ)))
-                    (add-transitions! s S-succ)
-                    (explore! W* V* S-end)))))))))
+        (let ((s (set-first W)))
+          (if (set-member? V s)
+              (explore! (set-rest W) V S-end)
+              (let ((S-succ (step s)))
+                (if (set-empty? S-succ) ; end state!
+                    (explore! (set-rest W) (set-add V s) (set-add S-end s))
+                    (let ((W* (set-union (set-rest W) S-succ)))
+                      (let succ-loop ((W-succ S-succ))
+                        (if (set-empty? W-succ)
+                            (begin
+                              (add-transitions! s S-succ)
+                              (explore! W* (set-add V s) S-end))
+                            (let ((s* (set-first W-succ)))
+                              (if (set-member? V s*) ; loop to visited state     
+                                (begin                 
+                                  (and debug-print (debug-print "LOOP: #~v -> #~v" (state->statei s) (state->statei s*)))
+                                  (if (points-to? s s* g) ; if already in graph
+                                      (begin
+                                        (and debug-print (debug-print "LOOP already in graph: #~v -> #~v" (state->statei s) (state->statei s*)))
+                                        (succ-loop (set-rest W-succ))
+                                      )
+                                      (begin ; break!
+                                        (and debug-print (debug-print "LOOP NOT already in graph: #~v -> #~v" (state->statei s) (state->statei s*)))
+                                        (add-transitions! s S-succ)
+                                        (set! ecache (hash-clear ecache))
+                                        (explore! W* (set) S-end)))
+                                )
+                                (succ-loop (set-rest W-succ)))))))))))))
 
   (define explore-start-time (current-milliseconds))
   (define S-end (explore! (set s0) (set) (set)))
   (define explore-time (- (current-milliseconds) explore-start-time))
 
   (and debug-print (debug-print "EXPLORED ~v -> ~v in ~a ms" (state->statei s0) (set-map S-end state->statei) explore-time))
-  (generate-dot (graph (graph-fwd g) (graph-bwd g) s0) "grapho")
+  (and output-graph (generate-dot (graph (graph-fwd g) (graph-bwd g) s0) "grapho"))
 
   (define (dispatcher msg)
     (match msg
@@ -439,9 +485,21 @@
   
   dispatcher)
       
+(define conc-kalloc
+    (let ((counter 0))
+      (lambda (e-app d-proc)
+        (begin
+          (set! counter (add1 counter))
+          counter))))
 
 (define (conc-eval e)
-  ((explore e conc-lattice) `(evaluate)))
+  ((explore e conc-lattice conc-kalloc) `(evaluate)))
+
+(define (type-kalloc e-app d-proc)
+  d-proc)
+  
+(define (type-eval e)
+  ((explore e type-lattice type-kalloc) `(evaluate)))
 
 ;;; OUTPUT STUFF
 (define (parameterize-full-debug!)
@@ -461,12 +519,18 @@
       (apply printf args)
       (newline))))
 
+(define (output-graph!)
+  (set! output-graph #t))
+
 (define (user-print d)
   (match d
-    ((obj e s) (format "(obj ~a ~a)" (ast->string e) (user-print s)))
+    ((obj e s) (format "(obj ~a ~a)" (user-print e) (user-print s)))
     ((state e κ) (format "#~v" (state->statei d)))
     ((root (cons e f) s) (format "(root (~a ~a) ~a)"(ast->string e) f (user-print s)))
     ((root e s) (format "(root ~a ~a)"(ast->string e) (user-print s)))
+    ((? ast?) (format "@~a" (ast-label d)))
+    ((? set?) (format "{~a}" (set-map d user-print)))
+    ((cons aa dd) (format "(~a ~a)" (user-print aa) (user-print dd)))
     (_ d)))
 
 (define (index v x)
@@ -481,42 +545,36 @@
 (define (state->statei q) (index stateis q))
 
 (define (state-repr s)
-  (format "~a | ~a" (ast->string (state-e s)) (state-κ s)))
+  (format "~a | ~a" (ast->string (state-e s)) (user-print (state-κ s))))
 
 (define (generate-dot g name)
   (let ((dotf (open-output-file (format "~a.dot" name) #:exists 'replace)))
   
-    (define (dot-helper s)
+    (define (dot-helper s S-seen)
       (let ((si (state->statei s)))
         (fprintf dotf "~a [label=\"~a | ~a\"];\n" si si (state-repr s))
         (let ((S-succ (successors s g)))
           (for ((s* (in-set S-succ)))
             (let ((si* (state->statei s*)))
               (fprintf dotf "~a -> ~a;\n" si si*)
-              (dot-helper s*))))))
+              (unless (set-member? S-seen s*)
+                (dot-helper s* (set-add S-seen s*))))))))
     
     (fprintf dotf "digraph G {\n")
     (let ((s0 (graph-initial g)))
-      (dot-helper s0)
+      (dot-helper s0 (set))
       (fprintf dotf "}")
       (close-output-port dotf))))
 
 ;;; TESTS
 
 (module+ main
- (parameterize-full-debug!)
- (conc-eval
-  (compile
-      '(let ((g #f)) 
-        (let ((f (lambda (n) 
-                  (let ((x n)) 
-                    (let ((u (if g 
-                                  123 
-                                  (set! g (lambda (y) (set! x y))))))
-                      (lambda () x))))))
-          (let ((f0 (f 0)))
-            (let ((u (g 9)))
-              (let ((f1 (f 1)))
-                (let ((u (f1))) 
-                  (f0)))))))
-  )))
+ ;(parameterize-full-debug!)
+ ;(output-graph!) 
+
+ (define e (compile (file->value "test/primtest.scm")))
+
+ (let ((start-time (current-milliseconds)))
+  (let ((result (type-eval e)))
+    (let ((end-time (- (current-milliseconds) start-time)))
+      (printf "~a\n~a ms\n" result end-time)))))

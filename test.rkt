@@ -6,17 +6,29 @@
 
 ;(parameterize-full-debug!)
 
-(define (test-machine e expected)
-  (let ((result
-            (with-handlers ((exn:fail?
-                             (lambda (exc) (if (eq? expected 'FAIL)
-                                             'FAIL
-                                             (begin
-                                               (printf "unexpected failure for ~a:\n" e)
-                                               (raise exc))))))
-              (conc-eval (compile e)))))
-         (unless (equal? result expected)
-           (error (format "wrong result for ~a:\n\texpected ~a\n\tgot      ~a" e expected result)))))
+(define (test-machine e conc-expected)
+  (let ((e-compiled (compile e)))
+    (let ((conc-result
+              (with-handlers ((exn:fail?
+                              (lambda (exc) (if (eq? conc-expected 'FAIL)
+                                              'FAIL
+                                              (begin
+                                                (printf "conc-eval: unexpected failure for ~a:\n" e)
+                                                (raise exc))))))
+                (conc-eval e-compiled))))
+      (let ((type-result
+                (with-handlers ((exn:fail?
+                                (lambda (exc) (if (eq? conc-expected 'FAIL)
+                                                'FAIL
+                                                (begin
+                                                  (printf "type-eval: unexpected failure for ~a:\n" e)
+                                                  (raise exc))))))
+              (type-eval e-compiled))))
+         (if (not (equal? conc-result conc-expected))
+             (error (format "conc-eval: wrong result for ~a:\n\texpected ~a\n\tgot      ~a" e conc-expected conc-result))
+             (if (not (or (and (eq? conc-expected 'FAIL) (eq? type-result 'FAIL)) (type-⊑ (type-α conc-expected) type-result)))
+                  (error (format "type-eval: type result does not subsume expected for ~a:\n\texpected ~a\n\tgot      ~a" e (type-α conc-expected) type-result))
+                  (format "ok: ~a" (~a e #:max-width 80))))))))
 
 (define start-time (current-milliseconds))
 (test-machine '123 123)
@@ -431,7 +443,7 @@
                 
 ;;; INTERESTING CASE is when the update exp of a set! can be non-atomic: first encountered set! when walking back is not the right one!
 ;;;; THEREFORE: we only allow aes as update exps
-;;;(test '(let ((x 123)) (let ((y (set! x (set! x 456)))) x)) 'undefined)
+;;;(test '(let ((x 123)) (let ((y (set! x (set! x 456)))) x)) 'unspecified)
 ;;;(test '(let ((x 123)) (let ((y (set! x (let ((u (set! x 456))) 789)))) x)) 789)
 
 ;;; SCHEME ERROR when setting before init
